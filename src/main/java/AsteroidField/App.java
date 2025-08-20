@@ -17,13 +17,9 @@ public class App extends Application {
         // 3D Asteroid Field View
         AsteroidField3DView fieldView = new AsteroidField3DView();
         root.setCenter(fieldView);
-
-        // Bottom: Controls 
         HBox controlsBox = fieldView.createControls(); // Use the dynamic controls
-//        controlsBox.setId("controls-box");
         root.setBottom(controlsBox);
 
-        // Scene with your custom CSS
         Scene scene = new Scene(root, 1024, 768, true);
         scene.setFill(Color.BLACK);
         String CSS = StyleResourceProvider.getResource("styles.css").toExternalForm();

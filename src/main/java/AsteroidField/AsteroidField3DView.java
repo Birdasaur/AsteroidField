@@ -30,7 +30,7 @@ public class AsteroidField3DView extends Pane {
     private MeshView asteroidLinesView;
     private AsteroidParameters params;
     private AsteroidMeshProvider currentProvider = AsteroidMeshProvider.PROVIDERS.values().iterator().next(); // default
-    
+
     private final Random seedRng = new Random();
 
     public AsteroidField3DView() {
@@ -54,7 +54,7 @@ public class AsteroidField3DView extends Pane {
         asteroidLinesView = new MeshView();
         asteroidLinesView.setMaterial(new PhongMaterial(Color.ALICEBLUE));
         asteroidLinesView.setDrawMode(DrawMode.LINE);
-        world.getChildren().add(asteroidLinesView);        
+        world.getChildren().add(asteroidLinesView);
 
         regenerateAsteroid();
 
@@ -78,31 +78,43 @@ public class AsteroidField3DView extends Pane {
         subScene.heightProperty().bind(heightProperty());
     }
 
-    /** Regenerates the MeshView with the current parameters. */
+    /**
+     * Regenerates the MeshView with the current parameters.
+     */
     public void regenerateAsteroid() {
-        AsteroidMeshProvider meshProvider = new AsteroidMeshProvider.Default();
+        AsteroidMeshProvider meshProvider = AsteroidMeshProvider.PROVIDERS.get(params.getFamilyName());
+        if (meshProvider == null) {
+            meshProvider = new AsteroidMeshProvider.Default();
+        }
         AsteroidGenerator generator = new AsteroidGenerator(meshProvider, params);
         TriangleMesh mesh = generator.generateAsteroid();
         asteroidView.setMesh(mesh);
         asteroidLinesView.setMesh(mesh);
-        
     }
 
-    /** Returns a fully configured HBox with controls for all parameters. */
+    /**
+     * Returns a fully configured HBox with controls for all parameters.
+     */
     public HBox createControls() {
         HBox hbox = new HBox(10);
-    // --- Family ComboBox ---
-    Label familyLabel = new Label("Family:");
-    ComboBox<String> familyBox = new ComboBox<>();
-familyBox.getItems().addAll(AsteroidMeshProvider.PROVIDERS.keySet());
-familyBox.getSelectionModel().selectFirst();
+        // --- Family ComboBox ---
+        Label familyLabel = new Label("Family:");
+        ComboBox<String> familyBox = new ComboBox<>();
+        familyBox.getItems().addAll(AsteroidMeshProvider.PROVIDERS.keySet());
+        familyBox.getSelectionModel().selectFirst();
 
-    familyBox.setOnAction(e -> {
-        String selected = familyBox.getValue();
-        currentProvider = AsteroidMeshProvider.PROVIDERS.get(familyBox.getValue());
-        // Optionally: set params to a recommended preset for this family
-        regenerateAsteroid();
-    });
+        familyBox.setOnAction(e -> {
+            String selected = familyBox.getValue();
+            currentProvider = AsteroidMeshProvider.PROVIDERS.get(selected);
+            params = new AsteroidParameters.Builder<>()
+                    .radius(params.getRadius())
+                    .subdivisions(params.getSubdivisions())
+                    .deformation(params.getDeformation())
+                    .seed(params.getSeed())
+                    .familyName(selected)
+                    .build();
+            regenerateAsteroid();
+        });
         // Radius slider
         Label radiusLabel = new Label("Radius:");
         Slider radiusSlider = new Slider(20, 300, params.getRadius());
@@ -183,12 +195,12 @@ familyBox.getSelectionModel().selectFirst();
         });
 
         hbox.getChildren().addAll(
-            new VBox(10, familyLabel, familyBox),
-            new VBox(10, radiusLabel, radiusSlider),
-            new VBox(10, subdivLabel, subdivSpinner),
-            new VBox(10, deformLabel, deformSlider),
-            new VBox(10, seedLabel, seedField),
-            randomizeBtn
+                new VBox(10, familyLabel, familyBox),
+                new VBox(10, radiusLabel, radiusSlider),
+                new VBox(10, subdivLabel, subdivSpinner),
+                new VBox(10, deformLabel, deformSlider),
+                new VBox(10, seedLabel, seedField),
+                randomizeBtn
         );
 
         return hbox;
