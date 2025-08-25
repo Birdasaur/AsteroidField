@@ -41,6 +41,8 @@ public interface AsteroidMeshProvider {
         map.put("Cubic", new CubicAsteroidMeshProvider());
         map.put("Spiky", new SpikyAsteroidMeshProvider());
         map.put("Cratered", new CrateredAsteroidMeshProvider());
+        map.put("Capsule", new CapsuleAsteroidMeshProvider());
+
         return map;
     }
 }
