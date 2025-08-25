@@ -16,11 +16,13 @@ public class App extends Application {
         root.setBackground(Background.EMPTY);
         // 3D Asteroid Field View
         AsteroidField3DView fieldView = new AsteroidField3DView();
+        HBox sceneControls = fieldView.createSceneControls();
+        root.setTop(sceneControls);
         root.setCenter(fieldView);
-        HBox controlsBox = fieldView.createControls(); // Use the dynamic controls
-        root.setBottom(controlsBox);
+        HBox asteroidControls = fieldView.createControls(); // Use the dynamic controls
+        root.setBottom(asteroidControls);
 
-        Scene scene = new Scene(root, 1024, 768, true);
+        Scene scene = new Scene(root, 1600, 1000, true);
         scene.setFill(Color.BLACK);
         String CSS = StyleResourceProvider.getResource("styles.css").toExternalForm();
         scene.getStylesheets().add(CSS);
