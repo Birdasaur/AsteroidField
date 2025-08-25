@@ -8,6 +8,7 @@ import javafx.scene.shape.MeshView;
 import javafx.scene.transform.Rotate;
 import java.util.List;
 import javafx.scene.PerspectiveCamera;
+import javafx.scene.input.MouseButton;
 
 public class TrackBallController {
 
@@ -47,7 +48,7 @@ public class TrackBallController {
     }
 
     private void onMouseClicked(MouseEvent event) {
-        if (event.isControlDown() && event.isPrimaryButtonDown()) {
+        if (event.isControlDown() && event.getButton() == MouseButton.PRIMARY) {
             Node picked = event.getPickResult().getIntersectedNode();
             if (picked instanceof MeshView && asteroidViews.contains(picked)) {
                 setSelected((MeshView)picked);

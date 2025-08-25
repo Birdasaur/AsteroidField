@@ -18,98 +18,178 @@ public class CapsuleAsteroidMeshProvider implements AsteroidMeshProvider {
         double width = params.getWidth();
         double length = params.getLength();
 
-        // --- 1. Build Vertices ---
         List<float[]> verts = new ArrayList<>();
         List<int[]> faces = new ArrayList<>();
         int capStacks = stacks / 2; // hemisphere stacks
-
-        // Top hemisphere
-        for (int i = 0; i <= capStacks; i++) {
-            double phi = Math.PI / 2 * (1.0 - (double) i / capStacks);
-            double y = (length / 2.0) + width * Math.sin(phi);
-            double r = width * Math.cos(phi);
-            for (int j = 0; j <= slices; j++) {
-                double theta = 2 * Math.PI * j / slices;
-                verts.add(new float[]{
-                        (float) (r * Math.cos(theta)),
-                        (float) y,
-                        (float) (r * Math.sin(theta))
-                });
-            }
-        }
-        // Cylinder (middle)
-        for (int i = 1; i < stacks; i++) { // NOTE: i=1 to stacks-1 (not 0 or stacks!)
-            double y = (length / 2.0) - (double) i / stacks * length;
-            for (int j = 0; j <= slices; j++) {
-                double theta = 2 * Math.PI * j / slices;
-                verts.add(new float[]{
-                        (float) (width * Math.cos(theta)),
-                        (float) y,
-                        (float) (width * Math.sin(theta))
-                });
-            }
-        }
-        // Bottom hemisphere
-        for (int i = 0; i <= capStacks; i++) {
-            double phi = -Math.PI / 2 * (double) i / capStacks;
-            double y = -(length / 2.0) + width * Math.sin(phi);
-            double r = width * Math.cos(phi);
-            for (int j = 0; j <= slices; j++) {
-                double theta = 2 * Math.PI * j / slices;
-                verts.add(new float[]{
-                        (float) (r * Math.cos(theta)),
-                        (float) y,
-                        (float) (r * Math.sin(theta))
-                });
-            }
-        }
-
-        // --- 2. Build Faces ---
-        // rows: top hemi (capStacks+1), cyl (stacks-1), bot hemi (capStacks+1)
-        int rows = capStacks + 1 + (stacks - 1) + capStacks + 1;
         int cols = slices + 1;
 
-        for (int i = 0; i < rows - 1; i++) {
-            for (int j = 0; j < slices; j++) {
-                int p0 = i * cols + j;
-                int p1 = p0 + 1;
-                int p2 = p0 + cols;
-                int p3 = p2 + 1;
-                faces.add(new int[]{p0, p2, p1});
-                faces.add(new int[]{p1, p2, p3});
-            }
+        // --- 1. Top cap: unique pole vertex per longitude ---
+        int topPoleStart = verts.size();
+        double yTop = (length / 2.0) + width;
+        for (int j = 0; j < slices; j++) {
+            verts.add(new float[]{
+                0f,
+                (float) yTop,
+                0f
+            }); // All at same location
+        }
+        // First ring below top
+        int topRingStart = verts.size();
+        double phi = Math.PI / 2 - Math.PI / (2 * capStacks);
+        double y = (length / 2.0) + width * Math.sin(phi);
+        double r = width * Math.cos(phi);
+        for (int j = 0; j < cols; j++) {
+            double theta = 2 * Math.PI * j / slices;
+            verts.add(new float[]{
+                (float) (r * Math.cos(theta)),
+                (float) y,
+                (float) (r * Math.sin(theta))
+            });
         }
 
-        // --- 3. Bumps and Craters ---
+        // --- 2. Top hemisphere between rings ---
+        int prevRingStart = topRingStart;
+        for (int i = 1; i < capStacks; i++) {
+            int thisRingStart = verts.size();
+            phi = Math.PI / 2 - Math.PI * i / (2 * capStacks);
+            y = (length / 2.0) + width * Math.sin(phi);
+            r = width * Math.cos(phi);
+            for (int j = 0; j < cols; j++) {
+                double theta = 2 * Math.PI * j / slices;
+                verts.add(new float[]{
+                    (float) (r * Math.cos(theta)),
+                    (float) y,
+                    (float) (r * Math.sin(theta))
+                });
+            }
+            // Connect prev ring to this ring
+            for (int j = 0; j < slices; j++) {
+                int a = prevRingStart + j;
+                int b = prevRingStart + j + 1;
+                int c = thisRingStart + j;
+                int d = thisRingStart + j + 1;
+                faces.add(new int[]{a, c, b});
+                faces.add(new int[]{b, c, d});
+            }
+            prevRingStart = thisRingStart;
+        }
+
+        // --- 3. Cylinder ---
+        int cylRings = stacks - 1;
+        for (int i = 0; i < cylRings; i++) {
+            int thisRingStart = verts.size();
+            y = (length / 2.0) - ((i + 1.0) / stacks) * length;
+            for (int j = 0; j < cols; j++) {
+                double theta = 2 * Math.PI * j / slices;
+                verts.add(new float[]{
+                    (float) (width * Math.cos(theta)),
+                    (float) y,
+                    (float) (width * Math.sin(theta))
+                });
+            }
+            // Connect prev ring to this ring
+            for (int j = 0; j < slices; j++) {
+                int a = prevRingStart + j;
+                int b = prevRingStart + j + 1;
+                int c = thisRingStart + j;
+                int d = thisRingStart + j + 1;
+                faces.add(new int[]{a, c, b});
+                faces.add(new int[]{b, c, d});
+            }
+            prevRingStart = thisRingStart;
+        }
+
+        // --- 4. Bottom hemisphere ---
+        for (int i = 1; i <= capStacks; i++) {
+            int thisRingStart = verts.size();
+            phi = -Math.PI * i / (2 * capStacks);
+            y = -(length / 2.0) + width * Math.sin(phi);
+            r = width * Math.cos(phi);
+            for (int j = 0; j < cols; j++) {
+                double theta = 2 * Math.PI * j / slices;
+                verts.add(new float[]{
+                    (float) (r * Math.cos(theta)),
+                    (float) y,
+                    (float) (r * Math.sin(theta))
+                });
+            }
+            // Connect prev ring to this ring
+            for (int j = 0; j < slices; j++) {
+                int a = prevRingStart + j;
+                int b = prevRingStart + j + 1;
+                int c = thisRingStart + j;
+                int d = thisRingStart + j + 1;
+                faces.add(new int[]{a, c, b});
+                faces.add(new int[]{b, c, d});
+            }
+            prevRingStart = thisRingStart;
+        }
+
+        // --- 5. Bottom cap: unique pole vertex per longitude ---
+        int botPoleStart = verts.size();
+        double yBot = -(length / 2.0) - width;
+        for (int j = 0; j < slices; j++) {
+            verts.add(new float[]{
+                0f,
+                (float) yBot,
+                0f
+            });
+        }
+        int lastRingStart = prevRingStart;
+        // Connect last ring to each bottom pole vertex
+        for (int j = 0; j < slices; j++) {
+            int pole = botPoleStart + j;
+            int a = lastRingStart + j;
+            int b = lastRingStart + j + 1;
+            // (Winding order may need to be [a, b, pole] or [b, a, pole] depending on orientation)
+            faces.add(new int[]{a, b, pole});
+//            faces.add(new int[]{b, a, pole});
+        }
+
+        // Connect top pole to top ring
+        for (int j = 0; j < slices; j++) {
+            int pole = topPoleStart + j;
+            int a = topRingStart + j;
+            int b = topRingStart + j + 1;
+            faces.add(new int[]{pole, a, b});
+//            faces.add(new int[]{pole, b, a});
+        }
+
+        //Bumps/Crater deformation 
         Random rng = new Random(params.getSeed());
         List<double[]> craters = new ArrayList<>();
-        for (int i = 0; i < params.getCraterCount(); i++)
+        for (int i = 0; i < params.getCraterCount(); i++) {
             craters.add(randomCapsuleSurfacePoint(rng, width, length));
+        }
         List<double[]> bumps = new ArrayList<>();
-        for (int i = 0; i < params.getBumpCount(); i++)
+        for (int i = 0; i < params.getBumpCount(); i++) {
             bumps.add(randomCapsuleSurfacePoint(rng, width, length));
+        }
 
         float[] meshVerts = new float[verts.size() * 3];
         for (int idx = 0; idx < verts.size(); idx++) {
             float[] v = verts.get(idx);
             double[] p = {v[0], v[1], v[2]};
-
             double disp = 0;
             for (double[] c : craters) {
                 double d = distOnCapsule(p, c, width, length);
                 double normD = d / (params.getCraterRadius() * width);
-                if (normD < 1.0)
+                if (normD < 1.0) {
                     disp -= params.getCraterDepth() * width * (1 - normD * normD);
+                }
             }
             for (double[] b : bumps) {
                 double d = distOnCapsule(p, b, width, length);
                 double normD = d / (params.getBumpRadius() * width);
-                if (normD < 1.0)
+                if (normD < 1.0) {
                     disp += params.getBumpHeight() * width * (1 - normD * normD);
+                }
             }
             double r0 = Math.sqrt(p[0] * p[0] + p[2] * p[2]);
             double nx = r0 > 1e-6 ? p[0] / r0 : 0, ny = 0, nz = r0 > 1e-6 ? p[2] / r0 : 0;
-            if (Math.abs(p[1]) > (length / 2.0) - 1e-2) ny = p[1] > 0 ? 1 : -1;
+            if (Math.abs(p[1]) > (length / 2.0) - 1e-2) {
+                ny = p[1] > 0 ? 1 : -1;
+            }
             meshVerts[idx * 3] = (float) (p[0] + nx * disp);
             meshVerts[idx * 3 + 1] = (float) (p[1] + ny * disp);
             meshVerts[idx * 3 + 2] = (float) (p[2] + nz * disp);
@@ -130,7 +210,9 @@ public class CapsuleAsteroidMeshProvider implements AsteroidMeshProvider {
         }
         mesh.getFaces().setAll(meshFaces);
         mesh.getFaceSmoothingGroups().clear();
-        for (int i = 0; i < faces.size(); i++) mesh.getFaceSmoothingGroups().addAll(1);
+        for (int i = 0; i < faces.size(); i++) {
+            mesh.getFaceSmoothingGroups().addAll(1);
+        }
 
         return mesh;
     }
@@ -242,5 +324,7 @@ public class CapsuleAsteroidMeshProvider implements AsteroidMeshProvider {
     }
 
     @Override
-    public String getDisplayName() { return "Capsule"; }
+    public String getDisplayName() {
+        return "Capsule";
+    }
 }
