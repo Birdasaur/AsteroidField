@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
 import javafx.beans.binding.Bindings;
+import javafx.scene.Node;
 import javafx.scene.control.Tooltip;
 
 public class AsteroidField3DView extends Pane {
@@ -58,16 +59,6 @@ public class AsteroidField3DView extends Pane {
     private Spinner<Integer> craterCountSpinner;
     private Slider craterDepthSlider;
     private Slider craterWidthSlider;
-
-    // Capsule controls (NEW, as fields!)
-    private Slider lengthSlider;
-    private Slider widthSlider;
-    private Spinner<Integer> capsuleCraterCountSpinner;
-    private Slider capsuleCraterDepthSlider;
-    private Slider capsuleCraterRadiusSlider;
-    private Spinner<Integer> bumpCountSpinner;
-    private Slider bumpHeightSlider;
-    private Slider bumpRadiusSlider;
 
     // Camera/app controls
     private ToggleButton cameraModeToggle;
@@ -306,43 +297,17 @@ public class AsteroidField3DView extends Pane {
      */
     private void updateDynamicParameterControls() {
         dynamicParamBox.getChildren().clear();
-        if (params instanceof CapsuleAsteroidParameters) {
-            CapsuleAsteroidParameters c = (CapsuleAsteroidParameters) params;
 
-            lengthSlider = new Slider(40, 400, c.getLength());
-            widthSlider = new Slider(15, 120, c.getWidth());
-            capsuleCraterCountSpinner = new Spinner<>();
-            capsuleCraterCountSpinner.setValueFactory(
-                    new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 32, c.getCraterCount()));
-            capsuleCraterDepthSlider = new Slider(0.02, 0.45, c.getCraterDepth());
-            capsuleCraterRadiusSlider = new Slider(0.05, 0.5, c.getCraterRadius());
-            bumpCountSpinner = new Spinner<>();
-            bumpCountSpinner.setValueFactory(
-                    new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 24, c.getBumpCount()));
-            bumpHeightSlider = new Slider(0.02, 0.40, c.getBumpHeight());
-            bumpRadiusSlider = new Slider(0.03, 0.45, c.getBumpRadius());
-
-            Consumer<Void> capsuleUpdate = unused -> {
-                params = buildCurrentParamsForCurrentFamily();
+        if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
+            Node controls = uiProvider.createDynamicControls(params, newParams -> {
+                params = newParams;
                 familyParamsMap.put(params.getFamilyName(), params);
                 regenerateAsteroid();
-            };
+            });
+            dynamicParamBox.getChildren().add(controls);
+        }
 
-            lengthSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            widthSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            capsuleCraterCountSpinner.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            capsuleCraterDepthSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            capsuleCraterRadiusSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            bumpCountSpinner.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            bumpHeightSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-            bumpRadiusSlider.valueProperty().addListener((obs, oldV, newV) -> capsuleUpdate.accept(null));
-
-            dynamicParamBox.getChildren().addAll(
-                    new VBox(5, new Label("Length:"), lengthSlider, new Label("Width:"), widthSlider),
-                    new VBox(5, new Label("Craters:"), capsuleCraterCountSpinner, new Label("Crater Depth:"), capsuleCraterDepthSlider, new Label("Crater Radius:"), capsuleCraterRadiusSlider),
-                    new VBox(5, new Label("Bumps:"), bumpCountSpinner, new Label("Bump Height:"), bumpHeightSlider, new Label("Bump Radius:"), bumpRadiusSlider)
-            );
-        } else if (params instanceof CrateredAsteroidParameters) {
+        else if (params instanceof CrateredAsteroidParameters) {
             CrateredAsteroidParameters c = (CrateredAsteroidParameters) params;
 
             craterCountSpinner = new Spinner<>();
@@ -403,26 +368,20 @@ public class AsteroidField3DView extends Pane {
             craterCountSpinner.getValueFactory().setValue(c.getCraterCount());
             craterDepthSlider.setValue(c.getCraterDepth());
             craterWidthSlider.setValue(c.getCraterWidth());
-        } // CAPSULE
-        else if (params instanceof CapsuleAsteroidParameters
-                && lengthSlider != null && widthSlider != null
-                && capsuleCraterCountSpinner != null && capsuleCraterDepthSlider != null && capsuleCraterRadiusSlider != null
-                && bumpCountSpinner != null && bumpHeightSlider != null && bumpRadiusSlider != null) {
-            CapsuleAsteroidParameters c = (CapsuleAsteroidParameters) params;
-            lengthSlider.setValue(c.getLength());
-            widthSlider.setValue(c.getWidth());
-            capsuleCraterCountSpinner.getValueFactory().setValue(c.getCraterCount());
-            capsuleCraterDepthSlider.setValue(c.getCraterDepth());
-            capsuleCraterRadiusSlider.setValue(c.getCraterRadius());
-            bumpCountSpinner.getValueFactory().setValue(c.getBumpCount());
-            bumpHeightSlider.setValue(c.getBumpHeight());
-            bumpRadiusSlider.setValue(c.getBumpRadius());
+        } 
+
+        else if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
+            uiProvider.setControlsFromParams(params);
         }
     }
 
     private AsteroidParameters buildCurrentParamsForCurrentFamily() {
-        String family = params.getFamilyName();
+        // Always get from UI family if available, otherwise shared controls.
+        if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
+            return uiProvider.getParamsFromControls();
+        }        
 
+        String family = params.getFamilyName();
         double radius = radiusSlider.getValue();
         int subdivisions = subdivSpinner.getValue();
         double deform = deformSlider.getValue();
@@ -433,36 +392,7 @@ public class AsteroidField3DView extends Pane {
             seed = params.getSeed();
         }
 
-        // CAPSULE FAMILY: Only build if ALL controls are non-null
-        if ("Capsule".equals(family)
-                && lengthSlider != null && widthSlider != null
-                && capsuleCraterCountSpinner != null && capsuleCraterDepthSlider != null && capsuleCraterRadiusSlider != null
-                && bumpCountSpinner != null && bumpHeightSlider != null && bumpRadiusSlider != null) {
-            double length = lengthSlider.getValue();
-            double width = widthSlider.getValue();
-            int craterCount = capsuleCraterCountSpinner.getValue();
-            double craterDepth = capsuleCraterDepthSlider.getValue();
-            double craterRadius = capsuleCraterRadiusSlider.getValue();
-            int bumpCount = bumpCountSpinner.getValue();
-            double bumpHeight = bumpHeightSlider.getValue();
-            double bumpRadius = bumpRadiusSlider.getValue();
-            return new CapsuleAsteroidParameters.Builder()
-                    .radius(radius)
-                    .subdivisions(subdivisions)
-                    .deformation(deform)
-                    .seed(seed)
-                    .familyName(family)
-                    .length(length)
-                    .width(width)
-                    .craterCount(craterCount)
-                    .craterDepth(craterDepth)
-                    .craterRadius(craterRadius)
-                    .bumpCount(bumpCount)
-                    .bumpHeight(bumpHeight)
-                    .bumpRadius(bumpRadius)
-                    .build();
-        } // CRATERED FAMILY: Only build if all controls are non-null
-        else if ("Cratered".equals(family)
+        if ("Cratered".equals(family)
                 && craterCountSpinner != null && craterDepthSlider != null && craterWidthSlider != null) {
             int craterCount = craterCountSpinner.getValue();
             double craterDepth = craterDepthSlider.getValue();
@@ -477,19 +407,32 @@ public class AsteroidField3DView extends Pane {
                     .craterDepth(craterDepth)
                     .craterWidth(craterWidth)
                     .build();
-        } // GENERIC: Fallback to base builder
-        else {
+        } else {
             return new AsteroidParameters.Builder<>()
                     .radius(radius)
                     .subdivisions(subdivisions)
                     .deformation(deform)
                     .seed(seed)
-                    .familyName(family)
-                    .build();
+                    .familyName(params.getFamilyName())
+                    .build();            
         }
     }
 
     private AsteroidParameters buildParamsForFamily(String family, AsteroidParameters oldParams) {
+        AsteroidMeshProvider provider = AsteroidMeshProvider.PROVIDERS.get(family);
+        if (provider instanceof AsteroidFamilyUI uiProvider) {
+            // Prefer provider's logic for default params
+            return uiProvider.buildDefaultParamsFrom(oldParams);
+        }
+    //    // fallback generic
+    //    return new AsteroidParameters.Builder<>()
+    //        .radius(oldParams.getRadius())
+    //        .subdivisions(oldParams.getSubdivisions())
+    //        .deformation(oldParams.getDeformation())
+    //        .seed(oldParams.getSeed())
+    //        .familyName(family)
+    //        .build();
+
         if ("Cratered".equals(family)) {
             int craterCount = 5;
             double craterDepth = 0.2;
@@ -510,37 +453,7 @@ public class AsteroidField3DView extends Pane {
                     .craterDepth(craterDepth)
                     .craterWidth(craterWidth)
                     .build();
-        } else if ("Capsule".equals(family)) {
-            double length = 200, width = 60;
-            int craterCount = 5, bumpCount = 4;
-            double craterDepth = 0.25, craterRadius = 0.2, bumpHeight = 0.22, bumpRadius = 0.18;
-            if (oldParams instanceof CapsuleAsteroidParameters) {
-                CapsuleAsteroidParameters c = (CapsuleAsteroidParameters) oldParams;
-                length = c.getLength();
-                width = c.getWidth();
-                craterCount = c.getCraterCount();
-                craterDepth = c.getCraterDepth();
-                craterRadius = c.getCraterRadius();
-                bumpCount = c.getBumpCount();
-                bumpHeight = c.getBumpHeight();
-                bumpRadius = c.getBumpRadius();
-            }
-            return new CapsuleAsteroidParameters.Builder()
-                    .radius(oldParams.getRadius())
-                    .subdivisions(oldParams.getSubdivisions())
-                    .deformation(oldParams.getDeformation())
-                    .seed(oldParams.getSeed())
-                    .familyName(family)
-                    .length(length)
-                    .width(width)
-                    .craterCount(craterCount)
-                    .craterDepth(craterDepth)
-                    .craterRadius(craterRadius)
-                    .bumpCount(bumpCount)
-                    .bumpHeight(bumpHeight)
-                    .bumpRadius(bumpRadius)
-                    .build();
-        } else {
+        }  else {
             return new AsteroidParameters.Builder<>()
                     .radius(oldParams.getRadius())
                     .subdivisions(oldParams.getSubdivisions())
