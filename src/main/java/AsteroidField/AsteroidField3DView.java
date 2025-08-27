@@ -254,10 +254,15 @@ public class AsteroidField3DView extends Pane {
                 new VBox(10, familyLabel, familyBox),
                 radiusBox, subdivBox, deformBox,
                 seedBox,
-                randomizeBtn,
-                dynamicParamBox
+                randomizeBtn
         );
         return hbox;
+    }
+    
+    public VBox getDynamicFamilyBox() {
+        VBox box = new VBox(10, new Label("Family Controls"), dynamicParamBox);
+        box.setMinWidth(220);
+        return box;
     }
 
     /**
@@ -276,7 +281,6 @@ public class AsteroidField3DView extends Pane {
             });
             dynamicParamBox.getChildren().add(controls);
         }
-        // (If you have families with ad-hoc controls, add here as needed)
     }
 
     public void regenerateAsteroid() {

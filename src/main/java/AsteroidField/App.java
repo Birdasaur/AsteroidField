@@ -5,6 +5,7 @@ import javafx.scene.Scene;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
@@ -21,7 +22,8 @@ public class App extends Application {
         root.setCenter(fieldView);
         HBox asteroidControls = fieldView.createControls(); // Use the dynamic controls
         root.setBottom(asteroidControls);
-
+        VBox dynamicControls = fieldView.getDynamicFamilyBox();
+        root.setRight(dynamicControls);
         Scene scene = new Scene(root, 1600, 1000, true);
         scene.setFill(Color.BLACK);
         String CSS = StyleResourceProvider.getResource("styles.css").toExternalForm();
