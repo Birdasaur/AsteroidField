@@ -1,34 +1,24 @@
 package AsteroidField;
 
-import java.util.ArrayList;
+import javafx.beans.binding.Bindings;
 import javafx.scene.Group;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
+import javafx.scene.control.*;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.Slider;
-import javafx.scene.control.Spinner;
-import javafx.scene.control.SpinnerValueFactory;
-import javafx.scene.control.Button;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.TextField;
-import javafx.scene.control.ComboBox;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.DrawMode;
 import javafx.scene.shape.MeshView;
-import javafx.scene.SceneAntialiasing;
 import javafx.scene.shape.TriangleMesh;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import javafx.scene.SceneAntialiasing;
+
+import java.util.*;
 import java.util.function.Consumer;
-import javafx.beans.binding.Bindings;
 import javafx.scene.Node;
-import javafx.scene.control.Tooltip;
 
 public class AsteroidField3DView extends Pane {
 
@@ -40,7 +30,6 @@ public class AsteroidField3DView extends Pane {
     private AsteroidParameters params;
     private AsteroidMeshProvider currentProvider = AsteroidMeshProvider.PROVIDERS.values().iterator().next();
 
-    // Store parameters for each family
     private final Map<String, AsteroidParameters> familyParamsMap = new HashMap<>();
     private final Random seedRng = new Random();
 
@@ -55,16 +44,10 @@ public class AsteroidField3DView extends Pane {
     // For dynamic family-specific controls
     private final HBox dynamicParamBox = new HBox(10);
 
-    // Hold cratered controls for reference in onChange (if present)
-    private Spinner<Integer> craterCountSpinner;
-    private Slider craterDepthSlider;
-    private Slider craterWidthSlider;
-
     // Camera/app controls
     private ToggleButton cameraModeToggle;
     private Button resetCameraBtn;
     private ComboBox<String> asteroidSelectorBox;
-    // Controllers
     private FlyCameraController flyController;
     private TrackBallController trackballController;
 
@@ -90,10 +73,9 @@ public class AsteroidField3DView extends Pane {
         asteroidLinesView.setDrawMode(DrawMode.LINE);
         world.getChildren().add(asteroidLinesView);
         Bindings.bindContent(asteroidLinesView.getTransforms(), asteroidView.getTransforms());
-        // modify only mesh1.getTransforms() from now on
 
         regenerateAsteroid();
-        selectedAsteroid = asteroidView; // default select first
+        selectedAsteroid = asteroidView;
 
         camera = new PerspectiveCamera(true);
         camera.setNearClip(0.1);
@@ -104,7 +86,6 @@ public class AsteroidField3DView extends Pane {
         subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
 
-        // Camera controllers
         flyController = new FlyCameraController(camera, subScene);
         flyController.setSpeed(150);
         flyController.setBoostMultiplier(3);
@@ -129,23 +110,18 @@ public class AsteroidField3DView extends Pane {
         resetCameraBtn = new Button("Reset Camera");
         resetCameraBtn.setTooltip(new Tooltip("Reset camera to default position"));
 
-        // --- NEW: Wireframe toggle ---
         ToggleButton wireframeToggle = new ToggleButton("Show Wireframe");
-        wireframeToggle.setSelected(true); // Default to ON if you want to show wireframe at startup
+        wireframeToggle.setSelected(true);
         wireframeToggle.setTooltip(new Tooltip("Show/hide asteroid wireframe overlay"));
-    // Bind visibility
-    wireframeToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-        if (asteroidLinesView != null) asteroidLinesView.setVisible(isSelected);
-    });
-    // Initial state (in case view is constructed before UI)
-    if (asteroidLinesView != null) asteroidLinesView.setVisible(wireframeToggle.isSelected());
+        wireframeToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
+            if (asteroidLinesView != null) asteroidLinesView.setVisible(isSelected);
+        });
+        if (asteroidLinesView != null) asteroidLinesView.setVisible(wireframeToggle.isSelected());
 
-        
         asteroidSelectorBox = new ComboBox<>();
         updateAsteroidSelectorBox();
         asteroidSelectorBox.setTooltip(new Tooltip("Select asteroid to rotate or highlight"));
 
-        // Camera toggling logic
         cameraModeToggle.setOnAction(e -> {
             boolean trackballMode = cameraModeToggle.isSelected();
             if (trackballMode) {
@@ -164,7 +140,6 @@ public class AsteroidField3DView extends Pane {
             camera.setTranslateZ(-600);
             camera.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0, 1, 0));
             camera.setRotate(0);
-            // Optionally, reset asteroid rotations if in trackball mode
             if (selectedAsteroid != null) {
                 selectedAsteroid.setRotationAxis(javafx.geometry.Point3D.ZERO.add(1, 0, 0));
                 selectedAsteroid.setRotate(0);
@@ -184,7 +159,6 @@ public class AsteroidField3DView extends Pane {
         return topBar;
     }
 
-    // When a new asteroid is created/removed, update the ComboBox
     private void updateAsteroidSelectorBox() {
         asteroidSelectorBox.getItems().clear();
         for (int i = 0; i < asteroidViews.size(); i++) {
@@ -195,38 +169,33 @@ public class AsteroidField3DView extends Pane {
         }
     }
 
-    // Selection logic for both picking and ComboBox
     public void setSelectedAsteroid(MeshView meshView) {
         if (selectedAsteroid != null) {
-            // Un-highlight previous
             selectedAsteroid.setMaterial(new PhongMaterial(Color.GAINSBORO));
         }
         selectedAsteroid = meshView;
         if (selectedAsteroid != null) {
-            selectedAsteroid.setMaterial(new PhongMaterial(Color.LIGHTGOLDENRODYELLOW)); // highlight
+            selectedAsteroid.setMaterial(new PhongMaterial(Color.LIGHTGOLDENRODYELLOW));
             trackballController.setSelected(selectedAsteroid);
             updateAsteroidSelectorBox();
         }
     }
 
-    // Example: method to create/add new asteroids (call this when generating a new one)
     public void addAsteroid(MeshView meshView) {
         asteroidViews.add(meshView);
         world.getChildren().add(meshView);
         updateAsteroidSelectorBox();
     }
 
-    // --- BOTTOM BAR: Asteroid Controls (as before) ---
+    // --- BOTTOM BAR: Asteroid Controls (with merged updater) ---
     public HBox createControls() {
         HBox hbox = new HBox(10);
 
-        // --- Family ComboBox ---
         Label familyLabel = new Label("Family:");
         ComboBox<String> familyBox = new ComboBox<>();
         familyBox.getItems().addAll(AsteroidMeshProvider.PROVIDERS.keySet());
         familyBox.getSelectionModel().select("Classic Rocky");
 
-        // --- Shared controls (as fields!) ---
         radiusSlider = new Slider(20, 300, params.getRadius());
         VBox radiusBox = new VBox(5, new Label("Radius:"), radiusSlider);
 
@@ -243,27 +212,26 @@ public class AsteroidField3DView extends Pane {
 
         Button randomizeBtn = new Button("Randomize");
 
-        // Listeners for shared controls: always build params from ALL controls (shared + custom)
-        Consumer<Void> sharedControlUpdate = unused -> {
-            params = buildCurrentParamsForCurrentFamily();
+        // --- Unified update for all controls (shared + dynamic) ---
+        Consumer<Void> mergedControlUpdate = unused -> {
+            params = buildMergedParams();
             familyParamsMap.put(params.getFamilyName(), params);
             updateDynamicParameterControlsValues();
             regenerateAsteroid();
         };
 
-        radiusSlider.valueProperty().addListener((obs, oldV, newV) -> sharedControlUpdate.accept(null));
-        subdivSpinner.valueProperty().addListener((obs, oldV, newV) -> sharedControlUpdate.accept(null));
-        deformSlider.valueProperty().addListener((obs, oldV, newV) -> sharedControlUpdate.accept(null));
-        seedField.setOnAction(e -> sharedControlUpdate.accept(null));
+        radiusSlider.valueProperty().addListener((obs, oldV, newV) -> mergedControlUpdate.accept(null));
+        subdivSpinner.valueProperty().addListener((obs, oldV, newV) -> mergedControlUpdate.accept(null));
+        deformSlider.valueProperty().addListener((obs, oldV, newV) -> mergedControlUpdate.accept(null));
+        seedField.setOnAction(e -> mergedControlUpdate.accept(null));
         randomizeBtn.setOnAction(e -> {
             long seed = seedRng.nextLong();
             seedField.setText(Long.toString(seed));
-            sharedControlUpdate.accept(null);
+            mergedControlUpdate.accept(null);
         });
 
-        // Handle family switching
         familyBox.setOnAction(e -> {
-            familyParamsMap.put(params.getFamilyName(), buildCurrentParamsForCurrentFamily());
+            familyParamsMap.put(params.getFamilyName(), buildMergedParams());
 
             String selected = familyBox.getValue();
             currentProvider = AsteroidMeshProvider.PROVIDERS.get(selected);
@@ -299,47 +267,16 @@ public class AsteroidField3DView extends Pane {
         dynamicParamBox.getChildren().clear();
 
         if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
+            // Pass the merged update as callback
             Node controls = uiProvider.createDynamicControls(params, newParams -> {
-                params = newParams;
+                params = buildMergedParams();
                 familyParamsMap.put(params.getFamilyName(), params);
+                updateDynamicParameterControlsValues();
                 regenerateAsteroid();
             });
             dynamicParamBox.getChildren().add(controls);
         }
-
-        else if (params instanceof CrateredAsteroidParameters) {
-            CrateredAsteroidParameters c = (CrateredAsteroidParameters) params;
-
-            craterCountSpinner = new Spinner<>();
-            craterCountSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 50, c.getCraterCount()));
-            craterCountSpinner.valueProperty().addListener((obs, oldV, newV) -> {
-                params = buildCurrentParamsForCurrentFamily();
-                familyParamsMap.put(params.getFamilyName(), params);
-                regenerateAsteroid();
-            });
-
-            craterDepthSlider = new Slider(0.05, 0.5, c.getCraterDepth());
-            craterDepthSlider.setShowTickLabels(true);
-            craterDepthSlider.valueProperty().addListener((obs, oldV, newV) -> {
-                params = buildCurrentParamsForCurrentFamily();
-                familyParamsMap.put(params.getFamilyName(), params);
-                regenerateAsteroid();
-            });
-
-            craterWidthSlider = new Slider(0.05, 0.6, c.getCraterWidth());
-            craterWidthSlider.setShowTickLabels(true);
-            craterWidthSlider.valueProperty().addListener((obs, oldV, newV) -> {
-                params = buildCurrentParamsForCurrentFamily();
-                familyParamsMap.put(params.getFamilyName(), params);
-                regenerateAsteroid();
-            });
-
-            dynamicParamBox.getChildren().addAll(
-                    new VBox(5, new Label("Craters:"), craterCountSpinner),
-                    new VBox(5, new Label("Crater Depth:"), craterDepthSlider),
-                    new VBox(5, new Label("Crater Width:"), craterWidthSlider)
-            );
-        }
+        // (If you have families with ad-hoc controls, add here as needed)
     }
 
     public void regenerateAsteroid() {
@@ -362,106 +299,48 @@ public class AsteroidField3DView extends Pane {
     }
 
     private void updateDynamicParameterControlsValues() {
-        // CRATERED
-        if (params instanceof CrateredAsteroidParameters && craterCountSpinner != null) {
-            CrateredAsteroidParameters c = (CrateredAsteroidParameters) params;
-            craterCountSpinner.getValueFactory().setValue(c.getCraterCount());
-            craterDepthSlider.setValue(c.getCraterDepth());
-            craterWidthSlider.setValue(c.getCraterWidth());
-        } 
-
-        else if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
+        if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
             uiProvider.setControlsFromParams(params);
         }
+        // Add logic for non-UI family controls if needed
     }
 
-    private AsteroidParameters buildCurrentParamsForCurrentFamily() {
-        // Always get from UI family if available, otherwise shared controls.
-        if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
-            return uiProvider.getParamsFromControls();
-        }        
+    /** Always merge shared and dynamic controls before regenerating asteroid. */
+    private AsteroidParameters buildMergedParams() {
+        AsteroidParameters familyParams = (currentProvider instanceof AsteroidFamilyUI uiProvider)
+                ? uiProvider.getParamsFromControls()
+                : params;
 
-        String family = params.getFamilyName();
-        double radius = radiusSlider.getValue();
-        int subdivisions = subdivSpinner.getValue();
-        double deform = deformSlider.getValue();
-        long seed;
+        AsteroidParameters.Builder<?> builder = familyParams.toBuilder();
+        builder
+                .radius(radiusSlider.getValue())
+                .subdivisions(subdivSpinner.getValue())
+                .deformation(deformSlider.getValue())
+                .seed(getCurrentSeed())
+                .familyName(familyParams.getFamilyName());
+        return builder.build();
+    }
+
+    private long getCurrentSeed() {
         try {
-            seed = Long.parseLong(seedField.getText());
+            return Long.parseLong(seedField.getText());
         } catch (Exception e) {
-            seed = params.getSeed();
-        }
-
-        if ("Cratered".equals(family)
-                && craterCountSpinner != null && craterDepthSlider != null && craterWidthSlider != null) {
-            int craterCount = craterCountSpinner.getValue();
-            double craterDepth = craterDepthSlider.getValue();
-            double craterWidth = craterWidthSlider.getValue();
-            return new CrateredAsteroidParameters.Builder()
-                    .radius(radius)
-                    .subdivisions(subdivisions)
-                    .deformation(deform)
-                    .seed(seed)
-                    .familyName(family)
-                    .craterCount(craterCount)
-                    .craterDepth(craterDepth)
-                    .craterWidth(craterWidth)
-                    .build();
-        } else {
-            return new AsteroidParameters.Builder<>()
-                    .radius(radius)
-                    .subdivisions(subdivisions)
-                    .deformation(deform)
-                    .seed(seed)
-                    .familyName(params.getFamilyName())
-                    .build();            
+            return params.getSeed();
         }
     }
 
     private AsteroidParameters buildParamsForFamily(String family, AsteroidParameters oldParams) {
         AsteroidMeshProvider provider = AsteroidMeshProvider.PROVIDERS.get(family);
         if (provider instanceof AsteroidFamilyUI uiProvider) {
-            // Prefer provider's logic for default params
             return uiProvider.buildDefaultParamsFrom(oldParams);
         }
-    //    // fallback generic
-    //    return new AsteroidParameters.Builder<>()
-    //        .radius(oldParams.getRadius())
-    //        .subdivisions(oldParams.getSubdivisions())
-    //        .deformation(oldParams.getDeformation())
-    //        .seed(oldParams.getSeed())
-    //        .familyName(family)
-    //        .build();
-
-        if ("Cratered".equals(family)) {
-            int craterCount = 5;
-            double craterDepth = 0.2;
-            double craterWidth = 0.2;
-            if (oldParams instanceof CrateredAsteroidParameters) {
-                CrateredAsteroidParameters c = (CrateredAsteroidParameters) oldParams;
-                craterCount = c.getCraterCount();
-                craterDepth = c.getCraterDepth();
-                craterWidth = c.getCraterWidth();
-            }
-            return new CrateredAsteroidParameters.Builder()
-                    .radius(oldParams.getRadius())
-                    .subdivisions(oldParams.getSubdivisions())
-                    .deformation(oldParams.getDeformation())
-                    .seed(oldParams.getSeed())
-                    .familyName(family)
-                    .craterCount(craterCount)
-                    .craterDepth(craterDepth)
-                    .craterWidth(craterWidth)
-                    .build();
-        }  else {
-            return new AsteroidParameters.Builder<>()
-                    .radius(oldParams.getRadius())
-                    .subdivisions(oldParams.getSubdivisions())
-                    .deformation(oldParams.getDeformation())
-                    .seed(oldParams.getSeed())
-                    .familyName(family)
-                    .build();
-        }
+        // ...handle other family types here if needed...
+        return new AsteroidParameters.Builder<>()
+                .radius(oldParams.getRadius())
+                .subdivisions(oldParams.getSubdivisions())
+                .deformation(oldParams.getDeformation())
+                .seed(oldParams.getSeed())
+                .familyName(family)
+                .build();
     }
-
 }

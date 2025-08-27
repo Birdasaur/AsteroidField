@@ -57,6 +57,25 @@ public class CapsuleAsteroidParameters extends AsteroidParameters {
             ? Collections.unmodifiableList(new ArrayList<>(b.bumpCenters))
             : null;
     }
+@Override
+public CapsuleAsteroidParameters.Builder toBuilder() {
+    return new CapsuleAsteroidParameters.Builder()
+            .radius(getRadius())
+            .subdivisions(getSubdivisions())
+            .deformation(getDeformation())
+            .seed(getSeed())
+            .familyName(getFamilyName())
+            .length(getLength())
+            .width(getWidth())
+            .craterCount(getCraterCount())
+            .craterDepth(getCraterDepth())
+            .craterRadius(getCraterRadius())
+            .bumpCount(getBumpCount())
+            .bumpHeight(getBumpHeight())
+            .bumpRadius(getBumpRadius())
+            .craterCenters(getCraterCenters())
+            .bumpCenters(getBumpCenters());
+}
 
     public double getLength() { return length; }
     public double getWidth() { return width; }

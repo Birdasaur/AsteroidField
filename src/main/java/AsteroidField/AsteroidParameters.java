@@ -39,4 +39,15 @@ public class AsteroidParameters {
     public double getDeformation() { return deformation; }
     public long getSeed() { return seed; }
     public String getFamilyName() { return familyName; }
+
+    /** Utility: create a builder pre-filled with this instance's values.
+     * @return  */
+    public Builder<?> toBuilder() {
+        return new Builder<>()
+                .radius(getRadius())
+                .subdivisions(getSubdivisions())
+                .deformation(getDeformation())
+                .seed(getSeed())
+                .familyName(getFamilyName());
+    }
 }
