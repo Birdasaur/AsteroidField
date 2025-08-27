@@ -1,150 +1,199 @@
 package AsteroidField;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 import javafx.scene.Node;
+import javafx.scene.layout.VBox;
+import javafx.scene.shape.TriangleMesh;
+import java.util.function.Consumer;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
-import javafx.scene.layout.VBox;
-import javafx.scene.shape.TriangleMesh;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.function.Consumer;
 
-public class CrateredAsteroidMeshProvider implements AsteroidMeshProvider {
+public class CrateredAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
+    // Dynamic control fields/state
+    private Spinner<Integer> craterCountSpinner;
+    private Slider craterDepthSlider, craterWidthSlider;
+    private Consumer<AsteroidParameters> onChangeCallback;
+    private CrateredAsteroidParameters lastParams = null;
+    private long lastRandomSeed = System.nanoTime();
 
     @Override
     public TriangleMesh generateMesh(AsteroidParameters baseParams) {
         CrateredAsteroidParameters params = (CrateredAsteroidParameters) baseParams;
+        CrateredMesh mesh = new CrateredMesh(params.getRadius(), params.getSubdivisions());
+        return deformCrateredMesh(mesh, params);
+    }
 
-        IcosphereMesh mesh = new IcosphereMesh(params.getRadius(), params.getSubdivisions());
-        float[] verts = mesh.getVertices();
-        Random rng = new Random(params.getSeed());
+    private TriangleMesh deformCrateredMesh(CrateredMesh mesh, CrateredAsteroidParameters params) {
+        List<double[]> craters = params.getCraterCenters();
+        if (craters == null) craters = Collections.emptyList();
+        float[] meshVerts = mesh.verts;
+        List<float[]> verts = mesh.vertsList;
+        double radius = params.getRadius();
 
-        List<double[]> craters = new ArrayList<>();
-        for (int i = 0; i < params.getCraterCount(); i++) {
-            double theta = 2 * Math.PI * rng.nextDouble();
-            double phi = Math.acos(2 * rng.nextDouble() - 1);
-            double x = Math.sin(phi) * Math.cos(theta);
-            double y = Math.sin(phi) * Math.sin(theta);
-            double z = Math.cos(phi);
-            craters.add(new double[]{x, y, z});
-        }
-
-        double craterWidth = params.getCraterWidth();
-        double craterDepth = params.getCraterDepth();
-
-        for (int i = 0; i < verts.length; i += 3) {
-            double x = verts[i], y = verts[i + 1], z = verts[i + 2];
+        for (int idx = 0; idx < verts.size(); idx++) {
+            float[] v = verts.get(idx);
+            double x = v[0], y = v[1], z = v[2];
             double r = Math.sqrt(x * x + y * y + z * z);
             double vx = x / r, vy = y / r, vz = z / r;
             double maxCraterEffect = 0;
             for (double[] crater : craters) {
                 double dot = vx * crater[0] + vy * crater[1] + vz * crater[2];
                 double angle = Math.acos(dot);
-                double normalized = angle / (craterWidth * Math.PI);
+                double normalized = angle / (params.getCraterWidth() * Math.PI);
                 if (normalized < 1.0) {
                     double effect = (1.0 - normalized * normalized);
                     if (effect > maxCraterEffect) maxCraterEffect = effect;
                 }
             }
+            double r2 = r;
             if (maxCraterEffect > 0) {
-                r -= craterDepth * params.getRadius() * maxCraterEffect;
+                r2 -= params.getCraterDepth() * radius * maxCraterEffect;
             }
-            verts[i] = (float) (vx * r);
-            verts[i + 1] = (float) (vy * r);
-            verts[i + 2] = (float) (vz * r);
+            meshVerts[idx * 3] = (float) (vx * r2);
+            meshVerts[idx * 3 + 1] = (float) (vy * r2);
+            meshVerts[idx * 3 + 2] = (float) (vz * r2);
         }
-
-        // Deformation (optional)
-        Random deformerRng = new Random(params.getSeed() ^ 0x12345678);
-        double deform = params.getDeformation();
-        for (int i = 0; i < verts.length; i += 3) {
-            double x = verts[i], y = verts[i + 1], z = verts[i + 2];
-            double r = Math.sqrt(x * x + y * y + z * z);
-            double bump = 1.0 + deform * (deformerRng.nextDouble() - 0.5) * 2.0;
-            verts[i] = (float) ((x / r) * r * bump);
-            verts[i + 1] = (float) ((y / r) * r * bump);
-            verts[i + 2] = (float) ((z / r) * r * bump);
-        }
-
-        TriangleMesh triMesh = new TriangleMesh();
-        triMesh.getPoints().setAll(verts);
-        triMesh.getTexCoords().addAll(0, 0);
-        triMesh.getFaces().setAll(mesh.getFaces());
-        triMesh.getFaceSmoothingGroups().clear();
-        int numFaces = mesh.getFaces().length / 6;
-        for (int i = 0; i < numFaces; i++) triMesh.getFaceSmoothingGroups().addAll(1);
-
-        return triMesh;
+        mesh.getPoints().setAll(meshVerts);
+        return mesh;
     }
 
-    /**
-     * This version takes as input the shared control values from the main view,
-     * so you can always rebuild from the *actual GUI state*.
-     */
+    private List<double[]> generateCraterCenters(int count, long seed) {
+        List<double[]> centers = new ArrayList<>(count);
+        Random rng = new Random(seed);
+        for (int i = 0; i < count; i++) {
+            double theta = 2 * Math.PI * rng.nextDouble();
+            double phi = Math.acos(2 * rng.nextDouble() - 1);
+            double x = Math.sin(phi) * Math.cos(theta);
+            double y = Math.sin(phi) * Math.sin(theta);
+            double z = Math.cos(phi);
+            centers.add(new double[]{x, y, z});
+        }
+        return centers;
+    }
+
     @Override
-    public List<Node> createParameterControls(Consumer<AsteroidParameters> onChange, AsteroidParameters current) {
-        CrateredAsteroidParameters cur = (current instanceof CrateredAsteroidParameters)
-                ? (CrateredAsteroidParameters) current
-                : new CrateredAsteroidParameters.Builder().build();
-        List<Node> controls = new ArrayList<>();
+    public Node createDynamicControls(AsteroidParameters startParams, Consumer<AsteroidParameters> onChange) {
+        this.onChangeCallback = onChange;
+        CrateredAsteroidParameters cur = (startParams instanceof CrateredAsteroidParameters)
+                ? (CrateredAsteroidParameters) startParams
+                : (CrateredAsteroidParameters) getDefaultParameters();
+        lastParams = cur;
 
-        // To be filled by the view for synchronization:
-        Spinner<Integer> craterCountSpinner = new Spinner<>();
+        craterCountSpinner = new Spinner<>();
         craterCountSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 50, cur.getCraterCount()));
-
-        Slider craterDepthSlider = new Slider(0.05, 0.5, cur.getCraterDepth());
+        craterDepthSlider = new Slider(0.05, 0.5, cur.getCraterDepth());
         craterDepthSlider.setShowTickLabels(true);
-
-        Slider craterWidthSlider = new Slider(0.05, 0.6, cur.getCraterWidth());
+        craterWidthSlider = new Slider(0.05, 0.6, cur.getCraterWidth());
         craterWidthSlider.setShowTickLabels(true);
 
-        // When *any* of these changes, use the most recent values from ALL controls in your main view!
-        craterCountSpinner.valueProperty().addListener((obs, oldV, newV) -> {
-            onChange.accept(new CrateredAsteroidParameters.Builder()
-                    .radius(cur.getRadius())
-                    .subdivisions(cur.getSubdivisions())
-                    .deformation(cur.getDeformation())
-                    .seed(cur.getSeed())
-                    .familyName(cur.getFamilyName())
-                    .craterCount(newV)
-                    .craterDepth(craterDepthSlider.getValue())
-                    .craterWidth(craterWidthSlider.getValue())
-                    .build());
+        Consumer<Void> update = unused -> {
+            lastParams = buildUpdatedParamsFromControls(lastParams, false);
+            if (onChangeCallback != null) {
+                onChangeCallback.accept(lastParams);
+            }
+        };
+
+        craterCountSpinner.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        craterDepthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        craterWidthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+
+        Button randomizeBtn = new Button("Randomize Craters");
+        randomizeBtn.setOnAction(e -> {
+            lastRandomSeed = System.nanoTime();
+            lastParams = buildUpdatedParamsFromControls(lastParams, true);
+            if (onChangeCallback != null) {
+                onChangeCallback.accept(lastParams);
+            }
         });
 
-        craterDepthSlider.valueProperty().addListener((obs, oldV, newV) -> {
-            onChange.accept(new CrateredAsteroidParameters.Builder()
-                    .radius(cur.getRadius())
-                    .subdivisions(cur.getSubdivisions())
-                    .deformation(cur.getDeformation())
-                    .seed(cur.getSeed())
-                    .familyName(cur.getFamilyName())
-                    .craterCount(craterCountSpinner.getValue())
-                    .craterDepth(newV.doubleValue())
-                    .craterWidth(craterWidthSlider.getValue())
-                    .build());
-        });
-
-        craterWidthSlider.valueProperty().addListener((obs, oldV, newV) -> {
-            onChange.accept(new CrateredAsteroidParameters.Builder()
-                    .radius(cur.getRadius())
-                    .subdivisions(cur.getSubdivisions())
-                    .deformation(cur.getDeformation())
-                    .seed(cur.getSeed())
-                    .familyName(cur.getFamilyName())
-                    .craterCount(craterCountSpinner.getValue())
-                    .craterDepth(craterDepthSlider.getValue())
-                    .craterWidth(newV.doubleValue())
-                    .build());
-        });
-
-        controls.add(new VBox(5, new Label("Craters:"), craterCountSpinner));
-        controls.add(new VBox(5, new Label("Crater Depth:"), craterDepthSlider));
-        controls.add(new VBox(5, new Label("Crater Width:"), craterWidthSlider));
+        VBox controls = new VBox(
+                new VBox(5, new Label("Crater Count:"), craterCountSpinner),
+                new VBox(5, new Label("Crater Depth:"), craterDepthSlider),
+                new VBox(5, new Label("Crater Width:"), craterWidthSlider),
+                randomizeBtn
+        );
+        setControlsFromParams(cur);
         return controls;
+    }
+
+    private CrateredAsteroidParameters buildUpdatedParamsFromControls(CrateredAsteroidParameters prev, boolean randomize) {
+        int craterCount = craterCountSpinner.getValue();
+        List<double[]> prevCraterCenters = (prev != null) ? prev.getCraterCenters() : null;
+        List<double[]> newCraterCenters = new ArrayList<>();
+        if (randomize || prevCraterCenters == null) {
+            newCraterCenters = generateCraterCenters(craterCount, System.nanoTime());
+        } else {
+            int keep = Math.min(craterCount, prevCraterCenters.size());
+            for (int i = 0; i < keep; i++) {
+                newCraterCenters.add(prevCraterCenters.get(i));
+            }
+            for (int i = keep; i < craterCount; i++) {
+                newCraterCenters.add(generateCraterCenters(1, System.nanoTime() + i).get(0));
+                try { Thread.sleep(1); } catch (InterruptedException e) {}
+            }
+        }
+
+        return new CrateredAsteroidParameters.Builder()
+                .radius(prev != null ? prev.getRadius() : 100)
+                .subdivisions(prev != null ? prev.getSubdivisions() : 2)
+                .deformation(prev != null ? prev.getDeformation() : 0.3)
+                .seed(prev != null ? prev.getSeed() : System.nanoTime())
+                .familyName("Cratered")
+                .craterCount(craterCount)
+                .craterDepth(craterDepthSlider.getValue())
+                .craterWidth(craterWidthSlider.getValue())
+                .craterCenters(newCraterCenters)
+                .build();
+    }
+
+    @Override
+    public void setControlsFromParams(AsteroidParameters params) {
+        if (!(params instanceof CrateredAsteroidParameters)) return;
+        CrateredAsteroidParameters c = (CrateredAsteroidParameters) params;
+        if (craterCountSpinner != null) craterCountSpinner.getValueFactory().setValue(c.getCraterCount());
+        if (craterDepthSlider != null) craterDepthSlider.setValue(c.getCraterDepth());
+        if (craterWidthSlider != null) craterWidthSlider.setValue(c.getCraterWidth());
+        lastParams = c;
+    }
+
+    @Override
+    public AsteroidParameters getParamsFromControls() {
+        return buildUpdatedParamsFromControls(lastParams, false);
+    }
+
+    @Override
+    public AsteroidParameters getDefaultParameters() {
+        long now = System.nanoTime();
+        return new CrateredAsteroidParameters.Builder()
+                .radius(100).subdivisions(2).deformation(0.3).seed(now).familyName("Cratered")
+                .craterCount(5).craterDepth(0.2).craterWidth(0.2)
+                .craterCenters(generateCraterCenters(5, now))
+                .build();
+    }
+
+    @Override
+    public AsteroidParameters buildDefaultParamsFrom(AsteroidParameters previous) {
+        long now = System.nanoTime();
+        int craterCount = (previous instanceof CrateredAsteroidParameters)
+                ? ((CrateredAsteroidParameters) previous).getCraterCount()
+                : 5;
+        return new CrateredAsteroidParameters.Builder()
+                .radius(previous.getRadius())
+                .subdivisions(previous.getSubdivisions())
+                .deformation(previous.getDeformation())
+                .seed(now)
+                .familyName("Cratered")
+                .craterCount(craterCount)
+                .craterDepth(0.2)
+                .craterWidth(0.2)
+                .craterCenters(generateCraterCenters(craterCount, now))
+                .build();
     }
 
     @Override

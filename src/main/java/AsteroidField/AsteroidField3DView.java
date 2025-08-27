@@ -1,11 +1,14 @@
 package AsteroidField;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import javafx.beans.binding.Bindings;
 import javafx.scene.Group;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
-import javafx.scene.control.*;
-import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
@@ -15,10 +18,17 @@ import javafx.scene.shape.DrawMode;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 import javafx.scene.SceneAntialiasing;
-
-import java.util.*;
 import java.util.function.Consumer;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
 
 public class AsteroidField3DView extends Pane {
 
@@ -306,7 +316,6 @@ public class AsteroidField3DView extends Pane {
         if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
             uiProvider.setControlsFromParams(params);
         }
-        // Add logic for non-UI family controls if needed
     }
 
     /** Always merge shared and dynamic controls before regenerating asteroid. */
