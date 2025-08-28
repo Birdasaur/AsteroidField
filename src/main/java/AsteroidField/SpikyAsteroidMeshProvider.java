@@ -12,7 +12,7 @@ import javafx.scene.control.SpinnerValueFactory;
 public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
 
     private Spinner<Integer> spikeCountSpinner;
-    private Slider spikeLengthSlider, spikeWidthSlider, randomnessSlider;
+    private Slider spikeLengthSlider, spikeWidthSlider, randomnessSlider, spikeSpacingJitterSlider;
     private Consumer<AsteroidParameters> onChangeCallback;
     private SpikyAsteroidParameters lastParams = null;
 
@@ -39,6 +39,8 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
         spikeWidthSlider.setShowTickLabels(true);
         randomnessSlider = new Slider(0, 1.0, cur.getRandomness());
         randomnessSlider.setShowTickLabels(true);
+        spikeSpacingJitterSlider = new Slider(0, 0.5, cur.getSpikeSpacingJitter());
+        spikeSpacingJitterSlider.setShowTickLabels(true);
 
         Consumer<Void> update = unused -> {
             lastParams = buildUpdatedParamsFromControls();
@@ -51,12 +53,14 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
         spikeLengthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
         spikeWidthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
         randomnessSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        spikeSpacingJitterSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
 
         VBox controls = new VBox(
                 new VBox(5, new Label("Spike Count:"), spikeCountSpinner),
                 new VBox(5, new Label("Spike Length:"), spikeLengthSlider),
                 new VBox(5, new Label("Spike Width:"), spikeWidthSlider),
-                new VBox(5, new Label("Randomness:"), randomnessSlider)
+                new VBox(5, new Label("Randomness:"), randomnessSlider),
+                new VBox(5, new Label("Spike Spacing Jitter:"), spikeSpacingJitterSlider)
         );
         setControlsFromParams(cur);
         return controls;
@@ -73,6 +77,7 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
                 .spikeLength(spikeLengthSlider.getValue())
                 .spikeWidth(spikeWidthSlider.getValue())
                 .randomness(randomnessSlider.getValue())
+                .spikeSpacingJitter(spikeSpacingJitterSlider.getValue())
                 .build();
     }
 
@@ -94,6 +99,9 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
         if (randomnessSlider != null) {
             randomnessSlider.setValue(c.getRandomness());
         }
+        if (spikeSpacingJitterSlider != null) {
+            spikeSpacingJitterSlider.setValue(c.getSpikeSpacingJitter());
+        }
         lastParams = c;
     }
 
@@ -106,7 +114,7 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
     public AsteroidParameters getDefaultParameters() {
         return new SpikyAsteroidParameters.Builder()
                 .radius(100).subdivisions(2).deformation(0.3).seed(System.nanoTime()).familyName("Spiky")
-                .spikeCount(20).spikeLength(1.5).spikeWidth(0.25).randomness(0.4)
+                .spikeCount(4).spikeLength(1.5).spikeWidth(0.25).randomness(0.4).spikeSpacingJitter(0.1)
                 .build();
     }
 
@@ -118,7 +126,7 @@ public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
                 .deformation(previous.getDeformation())
                 .seed(System.nanoTime())
                 .familyName("Spiky")
-                .spikeCount(20).spikeLength(1.5).spikeWidth(0.25).randomness(0.4)
+                .spikeCount(4).spikeLength(1.5).spikeWidth(0.25).randomness(0.4).spikeSpacingJitter(0.1)
                 .build();
     }
 
