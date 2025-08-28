@@ -4,32 +4,39 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javafx.scene.shape.TriangleMesh;
 
-
-public class IcosphereMesh {
-    private final float[] vertices;
-    private final int[] faces;
-    private final List<float[]> verticesList;
-    private final List<int[]> facesList;
+public class IcosphereMesh extends TriangleMesh {
+    protected final float[] verts;
+    protected final List<float[]> vertsList;
+    protected final int[] faces;
+    protected final List<int[]> facesList;
+    public final double radius;
+    public final int subdivisions;
 
     public IcosphereMesh(double radius, int subdivisions) {
+        super();
+        this.radius = radius;
+        this.subdivisions = subdivisions;
+
         double t = (1.0 + Math.sqrt(5.0)) / 2.0;
 
-        List<double[]> verts = new ArrayList<>(12);
-        verts.add(new double[]{-1,  t,  0});
-        verts.add(new double[]{ 1,  t,  0});
-        verts.add(new double[]{-1, -t,  0});
-        verts.add(new double[]{ 1, -t,  0});
-        verts.add(new double[]{ 0, -1,  t});
-        verts.add(new double[]{ 0,  1,  t});
-        verts.add(new double[]{ 0, -1, -t});
-        verts.add(new double[]{ 0,  1, -t});
-        verts.add(new double[]{ t,  0, -1});
-        verts.add(new double[]{ t,  0,  1});
-        verts.add(new double[]{-t,  0, -1});
-        verts.add(new double[]{-t,  0,  1});
+        List<double[]> vertsTmp = new ArrayList<>(12);
+        vertsTmp.add(new double[]{-1,  t,  0});
+        vertsTmp.add(new double[]{ 1,  t,  0});
+        vertsTmp.add(new double[]{-1, -t,  0});
+        vertsTmp.add(new double[]{ 1, -t,  0});
+        vertsTmp.add(new double[]{ 0, -1,  t});
+        vertsTmp.add(new double[]{ 0,  1,  t});
+        vertsTmp.add(new double[]{ 0, -1, -t});
+        vertsTmp.add(new double[]{ 0,  1, -t});
+        vertsTmp.add(new double[]{ t,  0, -1});
+        vertsTmp.add(new double[]{ t,  0,  1});
+        vertsTmp.add(new double[]{-t,  0, -1});
+        vertsTmp.add(new double[]{-t,  0,  1});
 
-        for (double[] v : verts) {
+        // Normalize to sphere
+        for (double[] v : vertsTmp) {
             double len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
             v[0] = v[0] / len * radius;
             v[1] = v[1] / len * radius;
@@ -53,9 +60,9 @@ public class IcosphereMesh {
                 int a = tri[0];
                 int b = tri[1];
                 int c = tri[2];
-                int ab = getMiddlePoint(a, b, verts, middlePointCache, radius);
-                int bc = getMiddlePoint(b, c, verts, middlePointCache, radius);
-                int ca = getMiddlePoint(c, a, verts, middlePointCache, radius);
+                int ab = getMiddlePoint(a, b, vertsTmp, middlePointCache, radius);
+                int bc = getMiddlePoint(b, c, vertsTmp, middlePointCache, radius);
+                int ca = getMiddlePoint(c, a, vertsTmp, middlePointCache, radius);
 
                 faces2.add(new int[]{a, ab, ca});
                 faces2.add(new int[]{b, bc, ab});
@@ -66,17 +73,16 @@ public class IcosphereMesh {
         }
 
         // Save vertices as float[] and List<float[]>
-        this.vertices = new float[verts.size() * 3];
-        this.verticesList = new ArrayList<>(verts.size());
-        for (int i = 0; i < verts.size(); i++) {
-            double[] v = verts.get(i);
-            this.vertices[3*i  ] = (float)v[0];
-            this.vertices[3*i+1] = (float)v[1];
-            this.vertices[3*i+2] = (float)v[2];
-            this.verticesList.add(new float[] {(float)v[0], (float)v[1], (float)v[2]});
+        this.verts = new float[vertsTmp.size() * 3];
+        this.vertsList = new ArrayList<>(vertsTmp.size());
+        for (int i = 0; i < vertsTmp.size(); i++) {
+            double[] v = vertsTmp.get(i);
+            this.verts[3*i  ] = (float)v[0];
+            this.verts[3*i+1] = (float)v[1];
+            this.verts[3*i+2] = (float)v[2];
+            this.vertsList.add(new float[] {(float)v[0], (float)v[1], (float)v[2]});
         }
 
-        // Save faces as int[] and List<int[]>
         this.faces = new int[fList.size() * 6];
         this.facesList = new ArrayList<>(fList.size());
         for (int i = 0; i < fList.size(); i++) {
@@ -86,6 +92,12 @@ public class IcosphereMesh {
             this.faces[i*6+4] = tri[2]; this.faces[i*6+5] = 0;
             this.facesList.add(tri.clone());
         }
+
+        getPoints().setAll(verts);
+        getTexCoords().addAll(0, 0);
+        getFaces().setAll(faces);
+        getFaceSmoothingGroups().clear();
+        for (int i = 0; i < faces.length / 6; i++) getFaceSmoothingGroups().addAll(1);
     }
 
     private static long getEdgeKey(int a, int b) {
@@ -113,8 +125,8 @@ public class IcosphereMesh {
         return idx;
     }
 
-    public float[] getVertices() { return vertices; }
-    public List<float[]> getVerticesList() { return verticesList; }
-    public int[] getFaces() { return faces; }
+    public float[] getVertsArray() { return verts; }
+    public List<float[]> getVertsList() { return vertsList; }
+    public int[] getFacesArray() { return faces; }
     public List<int[]> getFacesList() { return facesList; }
 }

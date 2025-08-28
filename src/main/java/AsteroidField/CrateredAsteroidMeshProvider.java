@@ -1,7 +1,6 @@
 package AsteroidField;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import javafx.scene.Node;
@@ -25,41 +24,7 @@ public class CrateredAsteroidMeshProvider implements AsteroidMeshProvider, Aster
     @Override
     public TriangleMesh generateMesh(AsteroidParameters baseParams) {
         CrateredAsteroidParameters params = (CrateredAsteroidParameters) baseParams;
-        CrateredMesh mesh = new CrateredMesh(params.getRadius(), params.getSubdivisions());
-        return deformCrateredMesh(mesh, params);
-    }
-
-    private TriangleMesh deformCrateredMesh(CrateredMesh mesh, CrateredAsteroidParameters params) {
-        List<double[]> craters = params.getCraterCenters();
-        if (craters == null) craters = Collections.emptyList();
-        float[] meshVerts = mesh.verts;
-        List<float[]> verts = mesh.vertsList;
-        double radius = params.getRadius();
-
-        for (int idx = 0; idx < verts.size(); idx++) {
-            float[] v = verts.get(idx);
-            double x = v[0], y = v[1], z = v[2];
-            double r = Math.sqrt(x * x + y * y + z * z);
-            double vx = x / r, vy = y / r, vz = z / r;
-            double maxCraterEffect = 0;
-            for (double[] crater : craters) {
-                double dot = vx * crater[0] + vy * crater[1] + vz * crater[2];
-                double angle = Math.acos(dot);
-                double normalized = angle / (params.getCraterWidth() * Math.PI);
-                if (normalized < 1.0) {
-                    double effect = (1.0 - normalized * normalized);
-                    if (effect > maxCraterEffect) maxCraterEffect = effect;
-                }
-            }
-            double r2 = r;
-            if (maxCraterEffect > 0) {
-                r2 -= params.getCraterDepth() * radius * maxCraterEffect;
-            }
-            meshVerts[idx * 3] = (float) (vx * r2);
-            meshVerts[idx * 3 + 1] = (float) (vy * r2);
-            meshVerts[idx * 3 + 2] = (float) (vz * r2);
-        }
-        mesh.getPoints().setAll(meshVerts);
+        CrateredMesh mesh = new CrateredMesh(params.getRadius(), params.getSubdivisions(), params);
         return mesh;
     }
 

@@ -12,7 +12,7 @@ public class IcosphereDeformer {
 
         // 2. Deform vertices using seeded random
         Random rng = new Random(params.getSeed());
-        float[] verts = mesh.getVertices();
+        float[] verts = mesh.getVertsArray();
         double def = params.getDeformation();
 
         for (int i = 0; i < verts.length; i += 3) {

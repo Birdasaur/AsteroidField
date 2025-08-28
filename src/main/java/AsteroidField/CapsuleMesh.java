@@ -1,7 +1,9 @@
 package AsteroidField;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import javafx.scene.shape.TriangleMesh;
-import java.util.*;
 
 public class CapsuleMesh extends TriangleMesh {
     private final float[] verts;
