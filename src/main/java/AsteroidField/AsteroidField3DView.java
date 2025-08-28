@@ -81,6 +81,7 @@ public class AsteroidField3DView extends Pane {
         asteroidLinesView = new MeshView();
         asteroidLinesView.setMaterial(new PhongMaterial(Color.ALICEBLUE));
         asteroidLinesView.setDrawMode(DrawMode.LINE);
+        asteroidLinesView.setMouseTransparent(true);
         world.getChildren().add(asteroidLinesView);
         Bindings.bindContent(asteroidLinesView.getTransforms(), asteroidView.getTransforms());
 
@@ -107,6 +108,8 @@ public class AsteroidField3DView extends Pane {
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
+        
+        
     }
 
     // --- TOP BAR: Scene/Application Controls ---
@@ -129,6 +132,7 @@ public class AsteroidField3DView extends Pane {
         if (asteroidLinesView != null) asteroidLinesView.setVisible(wireframeToggle.isSelected());
 
         asteroidSelectorBox = new ComboBox<>();
+        asteroidViews.add(asteroidView);
         updateAsteroidSelectorBox();
         asteroidSelectorBox.setTooltip(new Tooltip("Select asteroid to rotate or highlight"));
 

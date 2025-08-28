@@ -12,7 +12,7 @@ public class CrateredMesh extends TriangleMesh {
         IcosphereMesh mesh = new IcosphereMesh(radius, subdivisions);
 
         // vertsList for procedural logic, verts (flat array) for JavaFX
-        vertsList = mesh.getVerticesList(); // implement in IcosphereMesh or build from verts array
+        vertsList = mesh.getVerticesList(); 
         verts = mesh.getVertices();
         faces = mesh.getFaces();
 

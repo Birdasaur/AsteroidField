@@ -1,40 +1,129 @@
 package AsteroidField;
 
+import javafx.scene.Node;
+import javafx.scene.layout.VBox;
 import javafx.scene.shape.TriangleMesh;
-import java.util.Random;
+import java.util.function.Consumer;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 
-public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider {
+public class SpikyAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
+
+    private Spinner<Integer> spikeCountSpinner;
+    private Slider spikeLengthSlider, spikeWidthSlider, randomnessSlider;
+    private Consumer<AsteroidParameters> onChangeCallback;
+    private SpikyAsteroidParameters lastParams = null;
+
     @Override
-    public TriangleMesh generateMesh(AsteroidParameters params) {
-        // Start with a simple icosphere, but exaggerate deformation for spikes
-        IcosphereMesh base = new IcosphereMesh(params.getRadius(), params.getSubdivisions());
-        float[] verts = base.getVertices();
-        Random rng = new Random(params.getSeed());
-
-        // Spike every Nth vertex
-        int spikeStep = Math.max(1, verts.length / (3 * 20)); // About 20 spikes
-        for (int i = 0; i < verts.length; i += 3) {
-            double x = verts[i], y = verts[i+1], z = verts[i+2];
-            double len = Math.sqrt(x*x + y*y + z*z);
-            double bump = 1.0 + params.getDeformation() * (rng.nextDouble() - 0.5) * 2.0;
-
-            // Every Nth: add a spike
-            if ((i/3) % spikeStep == 0) bump += 1.5 * params.getDeformation() * (0.8 + rng.nextDouble());
-
-            double newLen = params.getRadius() * bump;
-            verts[i]   = (float)(x / len * newLen);
-            verts[i+1] = (float)(y / len * newLen);
-            verts[i+2] = (float)(z / len * newLen);
-        }
-
-        TriangleMesh mesh = new TriangleMesh();
-        mesh.getPoints().setAll(verts);
-        mesh.getTexCoords().addAll(0,0);
-        mesh.getFaces().setAll(base.getFaces());
-        mesh.getFaceSmoothingGroups().clear();
-        int numFaces = base.getFaces().length / 6;
-        for (int i = 0; i < numFaces; i++) mesh.getFaceSmoothingGroups().addAll(1);
-
+    public TriangleMesh generateMesh(AsteroidParameters baseParams) {
+        SpikyAsteroidParameters params = (SpikyAsteroidParameters) baseParams;
+        SpikyMesh mesh = new SpikyMesh(params.getRadius(), params.getSubdivisions(), params);
         return mesh;
+    }
+
+    @Override
+    public Node createDynamicControls(AsteroidParameters startParams, Consumer<AsteroidParameters> onChange) {
+        this.onChangeCallback = onChange;
+        SpikyAsteroidParameters cur = (startParams instanceof SpikyAsteroidParameters)
+                ? (SpikyAsteroidParameters) startParams
+                : (SpikyAsteroidParameters) getDefaultParameters();
+        lastParams = cur;
+
+        spikeCountSpinner = new Spinner<>();
+        spikeCountSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 200, cur.getSpikeCount()));
+        spikeLengthSlider = new Slider(0.0, 3.0, cur.getSpikeLength());
+        spikeLengthSlider.setShowTickLabels(true);
+        spikeWidthSlider = new Slider(0.01, 0.5, cur.getSpikeWidth());
+        spikeWidthSlider.setShowTickLabels(true);
+        randomnessSlider = new Slider(0, 1.0, cur.getRandomness());
+        randomnessSlider.setShowTickLabels(true);
+
+        Consumer<Void> update = unused -> {
+            lastParams = buildUpdatedParamsFromControls();
+            if (onChangeCallback != null) {
+                onChangeCallback.accept(lastParams);
+            }
+        };
+
+        spikeCountSpinner.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        spikeLengthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        spikeWidthSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+        randomnessSlider.valueProperty().addListener((obs, oldV, newV) -> update.accept(null));
+
+        VBox controls = new VBox(
+                new VBox(5, new Label("Spike Count:"), spikeCountSpinner),
+                new VBox(5, new Label("Spike Length:"), spikeLengthSlider),
+                new VBox(5, new Label("Spike Width:"), spikeWidthSlider),
+                new VBox(5, new Label("Randomness:"), randomnessSlider)
+        );
+        setControlsFromParams(cur);
+        return controls;
+    }
+
+    private SpikyAsteroidParameters buildUpdatedParamsFromControls() {
+        return new SpikyAsteroidParameters.Builder()
+                .radius(lastParams != null ? lastParams.getRadius() : 100)
+                .subdivisions(lastParams != null ? lastParams.getSubdivisions() : 2)
+                .deformation(lastParams != null ? lastParams.getDeformation() : 0.3)
+                .seed(lastParams != null ? lastParams.getSeed() : System.nanoTime())
+                .familyName("Spiky")
+                .spikeCount(spikeCountSpinner.getValue())
+                .spikeLength(spikeLengthSlider.getValue())
+                .spikeWidth(spikeWidthSlider.getValue())
+                .randomness(randomnessSlider.getValue())
+                .build();
+    }
+
+    @Override
+    public void setControlsFromParams(AsteroidParameters params) {
+        if (!(params instanceof SpikyAsteroidParameters)) {
+            return;
+        }
+        SpikyAsteroidParameters c = (SpikyAsteroidParameters) params;
+        if (spikeCountSpinner != null) {
+            spikeCountSpinner.getValueFactory().setValue(c.getSpikeCount());
+        }
+        if (spikeLengthSlider != null) {
+            spikeLengthSlider.setValue(c.getSpikeLength());
+        }
+        if (spikeWidthSlider != null) {
+            spikeWidthSlider.setValue(c.getSpikeWidth());
+        }
+        if (randomnessSlider != null) {
+            randomnessSlider.setValue(c.getRandomness());
+        }
+        lastParams = c;
+    }
+
+    @Override
+    public AsteroidParameters getParamsFromControls() {
+        return buildUpdatedParamsFromControls();
+    }
+
+    @Override
+    public AsteroidParameters getDefaultParameters() {
+        return new SpikyAsteroidParameters.Builder()
+                .radius(100).subdivisions(2).deformation(0.3).seed(System.nanoTime()).familyName("Spiky")
+                .spikeCount(20).spikeLength(1.5).spikeWidth(0.25).randomness(0.4)
+                .build();
+    }
+
+    @Override
+    public AsteroidParameters buildDefaultParamsFrom(AsteroidParameters previous) {
+        return new SpikyAsteroidParameters.Builder()
+                .radius(previous.getRadius())
+                .subdivisions(previous.getSubdivisions())
+                .deformation(previous.getDeformation())
+                .seed(System.nanoTime())
+                .familyName("Spiky")
+                .spikeCount(20).spikeLength(1.5).spikeWidth(0.25).randomness(0.4)
+                .build();
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "Spiky";
     }
 }
