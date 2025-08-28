@@ -6,9 +6,9 @@ import java.util.Random;
 import javafx.scene.shape.TriangleMesh;
 
 public class CapsuleMesh extends TriangleMesh {
-    private final float[] verts;
-    private final List<float[]> vertsList;
-    private final int[] faces;
+    protected final float[] verts;
+    protected final List<float[]> vertsList;
+    protected final int[] faces;
     public final int slices, stacks;
     public final double width, length;
 
@@ -163,8 +163,65 @@ public class CapsuleMesh extends TriangleMesh {
         for (int i = 0; i < faces.length / 6; i++) getFaceSmoothingGroups().addAll(1);
     }
 
-    /** Helper Utility Methods **/
+    /** Deform with bumps/craters. Call after construction or whenever parameters change. */
+    public void deform(CapsuleAsteroidParameters params) {
+        double width = params.getWidth();
+        double length = params.getLength();
 
+        float[] meshVerts = verts;
+        List<float[]> vertsLocal = vertsList;
+        List<double[]> craters = params.getCraterCenters();
+        List<double[]> bumps = params.getBumpCenters();
+        if (craters == null) craters = java.util.Collections.emptyList();
+        if (bumps == null) bumps = java.util.Collections.emptyList();
+
+        Random deformRng = new Random(params.getSeed() ^ 0xCAB51234);
+        double deform = params.getDeformation();
+
+        for (int idx = 0; idx < vertsLocal.size(); idx++) {
+            float[] v = vertsLocal.get(idx);
+            double[] p = {v[0], v[1], v[2]};
+            double disp = 0;
+            // Craters
+            for (double[] c : craters) {
+                double d = distOnCapsule(p, c, width, length);
+                double normD = d / (params.getCraterRadius() * width);
+                if (normD < 1.0) {
+                    disp -= params.getCraterDepth() * width * (1 - normD * normD);
+                }
+            }
+            // Bumps
+            for (double[] b : bumps) {
+                double d = distOnCapsule(p, b, width, length);
+                double normD = d / (params.getBumpRadius() * width);
+                if (normD < 1.0) {
+                    disp += params.getBumpHeight() * width * (1 - normD * normD);
+                }
+            }
+            // Move vertex along local normal (approx: away from Y axis)
+            double r0 = Math.sqrt(p[0]*p[0] + p[2]*p[2]);
+            double nx = r0 > 1e-6 ? p[0]/r0 : 0, ny = 0, nz = r0 > 1e-6 ? p[2]/r0 : 0;
+            if (Math.abs(p[1]) > (length/2.0) - 1e-2) {
+                ny = p[1] > 0 ? 1 : -1;
+            }
+            // --- Apply deformation bump ---
+            double bumpRand = 1.0 + deform * (deformRng.nextDouble() - 0.5) * 2.0;
+            meshVerts[idx * 3]     = (float) (p[0] + nx * disp) * (float) bumpRand;
+            meshVerts[idx * 3 + 1] = (float) (p[1] + ny * disp) * (float) bumpRand;
+            meshVerts[idx * 3 + 2] = (float) (p[2] + nz * disp) * (float) bumpRand;
+        }
+        getPoints().setAll(meshVerts);
+    }
+
+    // Helper for deformation logic
+    public static double distOnCapsule(double[] p, double[] c, double width, double length) {
+        double dx = p[0] - c[0];
+        double dy = p[1] - c[1];
+        double dz = p[2] - c[2];
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    // Utility for random surface point
     public static double[] randomCapsuleSurfacePoint(Random rng, double width, double length) {
         double t = rng.nextDouble();
         double theta = 2 * Math.PI * rng.nextDouble();
@@ -184,14 +241,6 @@ public class CapsuleMesh extends TriangleMesh {
         }
     }
 
-    public static double distOnCapsule(double[] p, double[] c, double width, double length) {
-        double dx = p[0] - c[0];
-        double dy = p[1] - c[1];
-        double dz = p[2] - c[2];
-        return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    }    
-    
-    /** Public access for deformation code. */
     public float[] getVertsArray() { return verts; }
     public List<float[]> getVertsList() { return vertsList; }
     public int[] getFacesArray() { return faces; }

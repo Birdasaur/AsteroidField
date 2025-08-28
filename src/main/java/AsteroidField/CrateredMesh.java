@@ -2,18 +2,25 @@ package AsteroidField;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 public class CrateredMesh extends IcosphereMesh {
+
     public CrateredMesh(double radius, int subdivisions, CrateredAsteroidParameters params) {
         super(radius, subdivisions);
         deform(params);
     }
 
-    /** Deform the mesh with the given crater parameters. Can be called repeatedly for real-time updates. */
     public void deform(CrateredAsteroidParameters params) {
         List<double[]> craters = params.getCraterCenters();
-        if (craters == null) craters = Collections.emptyList();
+        if (craters == null) {
+            craters = Collections.emptyList();
+        }
         double radius = params.getRadius();
+
+        // Deterministic RNG for deformation, to avoid jumpiness
+        Random deformRng = new Random(params.getSeed() ^ 0xFACE1234);
+        double deform = params.getDeformation();
 
         for (int idx = 0; idx < vertsList.size(); idx++) {
             float[] v = vertsList.get(idx);
@@ -23,20 +30,26 @@ public class CrateredMesh extends IcosphereMesh {
             double maxCraterEffect = 0;
             for (double[] crater : craters) {
                 double dot = vx * crater[0] + vy * crater[1] + vz * crater[2];
-                double angle = Math.acos(dot);
+                double angle = Math.acos(Math.max(-1, Math.min(1, dot)));
                 double normalized = angle / (params.getCraterWidth() * Math.PI);
                 if (normalized < 1.0) {
                     double effect = (1.0 - normalized * normalized);
-                    if (effect > maxCraterEffect) maxCraterEffect = effect;
+                    if (effect > maxCraterEffect) {
+                        maxCraterEffect = effect;
+                    }
                 }
             }
             double r2 = r;
             if (maxCraterEffect > 0) {
                 r2 -= params.getCraterDepth() * radius * maxCraterEffect;
             }
-            verts[idx*3]   = (float) (vx * r2);
-            verts[idx*3+1] = (float) (vy * r2);
-            verts[idx*3+2] = (float) (vz * r2);
+            // --- Apply deformation bump here ---
+            double bump = 1.0 + deform * (deformRng.nextDouble() - 0.5) * 2.0;
+            r2 *= bump;
+
+            verts[idx * 3] = (float) (vx * r2);
+            verts[idx * 3 + 1] = (float) (vy * r2);
+            verts[idx * 3 + 2] = (float) (vz * r2);
         }
         getPoints().setAll(verts);
     }
