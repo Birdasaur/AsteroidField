@@ -34,53 +34,6 @@ public class CapsuleAsteroidMeshProvider implements AsteroidMeshProvider, Astero
         mesh.deform(params);
         return mesh;
     }
-//
-//    public TriangleMesh deformCapsuleMesh(CapsuleMesh mesh, CapsuleAsteroidParameters params){
-//        double width = params.getWidth();
-//        double length = params.getLength();
-//
-//        float[] meshVerts = mesh.getVertsArray();
-//        List<float[]> verts = mesh.getVertsList();
-//        List<double[]> craters = params.getCraterCenters();
-//        List<double[]> bumps = params.getBumpCenters();
-//        if (craters == null) {
-//            craters = Collections.emptyList();
-//        }
-//        if (bumps == null) {
-//            bumps = Collections.emptyList();
-//        }
-//
-//        // Deform mesh as before
-//        for (int idx = 0; idx < verts.size(); idx++) {
-//            float[] v = verts.get(idx);
-//            double[] p = {v[0], v[1], v[2]};
-//            double disp = 0;
-//            for (double[] c : craters) {
-//                double d = CapsuleMesh.distOnCapsule(p, c, width, length);
-//                double normD = d / (params.getCraterRadius() * width);
-//                if (normD < 1.0) {
-//                    disp -= params.getCraterDepth() * width * (1 - normD * normD);
-//                }
-//            }
-//            for (double[] b : bumps) {
-//                double d = CapsuleMesh.distOnCapsule(p, b, width, length);
-//                double normD = d / (params.getBumpRadius() * width);
-//                if (normD < 1.0) {
-//                    disp += params.getBumpHeight() * width * (1 - normD * normD);
-//                }
-//            }
-//            double r0 = Math.sqrt(p[0] * p[0] + p[2] * p[2]);
-//            double nx = r0 > 1e-6 ? p[0] / r0 : 0, ny = 0, nz = r0 > 1e-6 ? p[2] / r0 : 0;
-//            if (Math.abs(p[1]) > (length / 2.0) - 1e-2) {
-//                ny = p[1] > 0 ? 1 : -1;
-//            }
-//            meshVerts[idx * 3] = (float) (p[0] + nx * disp);
-//            meshVerts[idx * 3 + 1] = (float) (p[1] + ny * disp);
-//            meshVerts[idx * 3 + 2] = (float) (p[2] + nz * disp);
-//        }
-//        mesh.getPoints().setAll(meshVerts);
-//        return mesh;        
-//    }
 
     private List<double[]> generateFeatureCenters(int count, double width, double length, long seed) {
         List<double[]> centers = new ArrayList<>(count);
