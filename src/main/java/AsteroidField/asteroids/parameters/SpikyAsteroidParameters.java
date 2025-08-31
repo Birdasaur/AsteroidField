@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.asteroids.parameters;
 
 public class SpikyAsteroidParameters extends AsteroidParameters {
     private final int spikeCount;

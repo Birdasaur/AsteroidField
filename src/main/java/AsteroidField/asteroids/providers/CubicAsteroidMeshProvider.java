@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.asteroids.providers;
 
+import AsteroidField.asteroids.parameters.AsteroidParameters;
 import javafx.scene.shape.TriangleMesh;
 import java.util.Random;
 

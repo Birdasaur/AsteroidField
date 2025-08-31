@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.asteroids.geometry;
 
+import AsteroidField.asteroids.parameters.SpikyAsteroidParameters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;

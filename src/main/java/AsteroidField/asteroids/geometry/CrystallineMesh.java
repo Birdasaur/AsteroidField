@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.asteroids.geometry;
 
+import AsteroidField.asteroids.parameters.CrystallineAsteroidParameters;
 import java.util.*;
 
 public class CrystallineMesh extends IcosphereMesh {

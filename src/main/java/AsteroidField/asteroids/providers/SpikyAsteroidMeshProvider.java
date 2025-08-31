@@ -1,5 +1,9 @@
-package AsteroidField;
+package AsteroidField.asteroids.providers;
 
+import AsteroidField.asteroids.AsteroidFamilyUI;
+import AsteroidField.asteroids.parameters.AsteroidParameters;
+import AsteroidField.asteroids.parameters.SpikyAsteroidParameters;
+import AsteroidField.asteroids.geometry.SpikyMesh;
 import javafx.scene.Node;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.TriangleMesh;

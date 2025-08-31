@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.asteroids.geometry;
 
+import AsteroidField.asteroids.parameters.CrateredAsteroidParameters;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;

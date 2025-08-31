@@ -1,5 +1,9 @@
-package AsteroidField;
+package AsteroidField.asteroids.providers;
 
+import AsteroidField.asteroids.AsteroidFamilyUI;
+import AsteroidField.asteroids.parameters.AsteroidParameters;
+import AsteroidField.asteroids.parameters.CrateredAsteroidParameters;
+import AsteroidField.asteroids.geometry.CrateredMesh;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;

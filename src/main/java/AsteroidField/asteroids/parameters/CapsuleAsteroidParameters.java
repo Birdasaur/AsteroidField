@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.asteroids.parameters;
 
 import java.util.ArrayList;
 import java.util.Collections;

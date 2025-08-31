@@ -1,5 +1,7 @@
-package AsteroidField;
+package AsteroidField.asteroids.providers;
 
+import AsteroidField.asteroids.parameters.AsteroidParameters;
+import AsteroidField.asteroids.geometry.IcosphereDeformer;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

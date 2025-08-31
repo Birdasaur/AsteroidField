@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.asteroids;
 
+import AsteroidField.asteroids.parameters.AsteroidParameters;
 import javafx.scene.Node;
 import java.util.function.Consumer;
 
