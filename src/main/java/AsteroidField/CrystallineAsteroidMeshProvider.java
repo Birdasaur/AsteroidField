@@ -6,15 +6,20 @@ import javafx.scene.shape.TriangleMesh;
 import java.util.function.Consumer;
 import javafx.scene.control.*;
 import javafx.beans.value.ChangeListener;
+import javafx.geometry.Insets;
 
 public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
 
     // GUI controls
-    private Spinner<Integer> crystalCountSpinner, prismSidesSpinner, maxClusterSizeSpinner, clusterSpreadSpinner;
+    private Spinner<Integer> crystalCountSpinner, prismSidesSpinner, maxClusterSizeSpinner, clusterSpreadSpinner, offshootRecursionSpinner;
     private CheckBox capBaseCheck, capTipCheck;
     private Slider minCrystalLengthSlider, maxCrystalLengthSlider;
     private Slider minCrystalRadiusSlider, maxCrystalRadiusSlider;
-    private Slider tipRadiusScaleSlider, maxTiltAngleSlider, lengthJitterSlider, radiusJitterSlider, embedDepthSlider;
+    private Slider tipRadiusScaleSlider, embedDepthSlider, facetJitterSlider;
+    private Slider lengthJitterSlider, radiusJitterSlider, maxTiltAngleSlider;
+    private Slider pointyTipChanceSlider, bevelTipChanceSlider, bevelDepthSlider;
+    private Slider offshootChanceSlider, offshootScaleSlider;
+    private Slider twistAmountSlider, fractureChanceSlider, fractureDepthSlider;
     private Consumer<AsteroidParameters> onChangeCallback;
     private CrystallineAsteroidParameters lastParams = null;
 
@@ -37,31 +42,53 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         prismSidesSpinner = new Spinner<>(3, 16, cur.getPrismSides());
         maxClusterSizeSpinner = new Spinner<>(1, 12, cur.getMaxClusterSize());
         clusterSpreadSpinner = new Spinner<>(1, 6, cur.getClusterSpread());
+        offshootRecursionSpinner = new Spinner<>(0, 3, cur.getOffshootRecursion());
 
         capBaseCheck = new CheckBox("Cap Base");
         capBaseCheck.setSelected(cur.isCapBase());
         capTipCheck = new CheckBox("Cap Tip");
         capTipCheck.setSelected(cur.isCapTip());
 
-        minCrystalLengthSlider = new Slider(0.01, 0.2, cur.getMinCrystalLength());
-        maxCrystalLengthSlider = new Slider(0.01, 0.3, cur.getMaxCrystalLength());
-        minCrystalRadiusSlider = new Slider(0.003, 0.07, cur.getMinCrystalRadius());
-        maxCrystalRadiusSlider = new Slider(0.003, 0.13, cur.getMaxCrystalRadius());
+        minCrystalLengthSlider = new Slider(0.01, 1.0, cur.getMinCrystalLength());
+        maxCrystalLengthSlider = new Slider(0.01, 1.5, cur.getMaxCrystalLength());
+        minCrystalRadiusSlider = new Slider(0.003, 0.1, cur.getMinCrystalRadius());
+        maxCrystalRadiusSlider = new Slider(0.003, 0.5, cur.getMaxCrystalRadius());
         tipRadiusScaleSlider = new Slider(0.0, 1.0, cur.getTipRadiusScale());
-        maxTiltAngleSlider = new Slider(0.0, Math.toRadians(30.0), cur.getMaxTiltAngleRadians());
+        embedDepthSlider = new Slider(0.0, 0.4, cur.getEmbedDepth());
+        facetJitterSlider = new Slider(0.0, 0.3, cur.getFacetJitter());
         lengthJitterSlider = new Slider(0.0, 0.5, cur.getLengthJitter());
         radiusJitterSlider = new Slider(0.0, 0.2, cur.getRadiusJitter());
-        embedDepthSlider = new Slider(0.0, 0.4, cur.getEmbedDepth()); // NEW
+        maxTiltAngleSlider = new Slider(0.0, Math.toRadians(30.0), cur.getMaxTiltAngleRadians());
+
+        pointyTipChanceSlider = new Slider(0.0, 1.0, cur.getPointyTipChance());
+        bevelTipChanceSlider = new Slider(0.0, 1.0, cur.getBevelTipChance());
+        bevelDepthSlider = new Slider(0.0, 0.25, cur.getBevelDepth());
+
+        offshootChanceSlider = new Slider(0.0, 0.6, cur.getOffshootChance());
+        offshootScaleSlider = new Slider(0.1, 0.8, cur.getOffshootScale());
+
+        twistAmountSlider = new Slider(0.0, Math.toRadians(30.0), cur.getTwistAmount());
+        fractureChanceSlider = new Slider(0.0, 1.0, cur.getFractureChance());
+        fractureDepthSlider = new Slider(0.0, 0.3, cur.getFractureDepth());
 
         minCrystalLengthSlider.setShowTickLabels(true);
         maxCrystalLengthSlider.setShowTickLabels(true);
         minCrystalRadiusSlider.setShowTickLabels(true);
         maxCrystalRadiusSlider.setShowTickLabels(true);
         tipRadiusScaleSlider.setShowTickLabels(true);
-        maxTiltAngleSlider.setShowTickLabels(true);
+        embedDepthSlider.setShowTickLabels(true);
+        facetJitterSlider.setShowTickLabels(true);
         lengthJitterSlider.setShowTickLabels(true);
         radiusJitterSlider.setShowTickLabels(true);
-        embedDepthSlider.setShowTickLabels(true);
+        maxTiltAngleSlider.setShowTickLabels(true);
+        pointyTipChanceSlider.setShowTickLabels(true);
+        bevelTipChanceSlider.setShowTickLabels(true);
+        bevelDepthSlider.setShowTickLabels(true);
+        offshootChanceSlider.setShowTickLabels(true);
+        offshootScaleSlider.setShowTickLabels(true);
+        twistAmountSlider.setShowTickLabels(true);
+        fractureChanceSlider.setShowTickLabels(true);
+        fractureDepthSlider.setShowTickLabels(true);
 
         ChangeListener<Object> update = (obs, oldV, newV) -> fireParamsChanged();
 
@@ -69,19 +96,35 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         prismSidesSpinner.valueProperty().addListener(update);
         maxClusterSizeSpinner.valueProperty().addListener(update);
         clusterSpreadSpinner.valueProperty().addListener(update);
+        offshootRecursionSpinner.valueProperty().addListener(update);
+
         capBaseCheck.selectedProperty().addListener(update);
         capTipCheck.selectedProperty().addListener(update);
+
         minCrystalLengthSlider.valueProperty().addListener(update);
         maxCrystalLengthSlider.valueProperty().addListener(update);
         minCrystalRadiusSlider.valueProperty().addListener(update);
         maxCrystalRadiusSlider.valueProperty().addListener(update);
         tipRadiusScaleSlider.valueProperty().addListener(update);
-        maxTiltAngleSlider.valueProperty().addListener(update);
+        embedDepthSlider.valueProperty().addListener(update);
+        facetJitterSlider.valueProperty().addListener(update);
         lengthJitterSlider.valueProperty().addListener(update);
         radiusJitterSlider.valueProperty().addListener(update);
-        embedDepthSlider.valueProperty().addListener(update);
+        maxTiltAngleSlider.valueProperty().addListener(update);
+
+        pointyTipChanceSlider.valueProperty().addListener(update);
+        bevelTipChanceSlider.valueProperty().addListener(update);
+        bevelDepthSlider.valueProperty().addListener(update);
+
+        offshootChanceSlider.valueProperty().addListener(update);
+        offshootScaleSlider.valueProperty().addListener(update);
+
+        twistAmountSlider.valueProperty().addListener(update);
+        fractureChanceSlider.valueProperty().addListener(update);
+        fractureDepthSlider.valueProperty().addListener(update);
 
         VBox controls = new VBox(
+            new Label("Crystal Family Controls"),
             new VBox(5, new Label("Crystal Count:"), crystalCountSpinner),
             new VBox(5, new Label("Prism Sides:"), prismSidesSpinner),
             new VBox(5, new Label("Cluster Size:"), maxClusterSizeSpinner),
@@ -92,13 +135,37 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
             new VBox(5, new Label("Min Crystal Radius (×core radius):"), minCrystalRadiusSlider),
             new VBox(5, new Label("Max Crystal Radius (×core radius):"), maxCrystalRadiusSlider),
             new VBox(5, new Label("Tip Radius Scale:"), tipRadiusScaleSlider),
-            new VBox(5, new Label("Max Tilt Angle (radians):"), maxTiltAngleSlider),
+            new VBox(5, new Label("Embed Depth (×core radius):"), embedDepthSlider),
+            new VBox(5, new Label("Facet Jitter:"), facetJitterSlider),
             new VBox(5, new Label("Length Jitter:"), lengthJitterSlider),
             new VBox(5, new Label("Radius Jitter:"), radiusJitterSlider),
-            new VBox(5, new Label("Embed Depth (×core radius):"), embedDepthSlider) // NEW
+            new VBox(5, new Label("Max Tilt Angle (radians):"), maxTiltAngleSlider),
+            new Separator(),
+            new Label("Tip/Termination:"),
+            new VBox(5, new Label("Pointy Tip Chance:"), pointyTipChanceSlider),
+            new VBox(5, new Label("Bevel Tip Chance:"), bevelTipChanceSlider),
+            new VBox(5, new Label("Bevel Depth (×crystal length):"), bevelDepthSlider),
+            new Separator(),
+            new Label("Crystal Offshoots:"),
+            new VBox(5, new Label("Offshoot Chance:"), offshootChanceSlider),
+            new VBox(5, new Label("Offshoot Scale:"), offshootScaleSlider),
+            new VBox(5, new Label("Offshoot Recursion:"), offshootRecursionSpinner),
+            new Separator(),
+            new Label("Advanced Effects:"),
+            new VBox(5, new Label("Max Twist (radians):"), twistAmountSlider),
+            new VBox(5, new Label("Fracture Chance:"), fractureChanceSlider),
+            new VBox(5, new Label("Fracture Depth (×core radius):"), fractureDepthSlider)
         );
         setControlsFromParams(cur);
-        return controls;
+        controls.setSpacing(8);
+        controls.setPadding(new Insets(10)); 
+
+        ScrollPane scrollPane = new ScrollPane(controls);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPannable(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // Optional: disable horizontal scroll
+
+        return scrollPane;        
     }
 
     private void fireParamsChanged() {
@@ -130,10 +197,20 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
             .minCrystalRadius(minRad)
             .maxCrystalRadius(maxRad)
             .tipRadiusScale(tipRadiusScaleSlider.getValue())
-            .maxTiltAngleRadians(maxTiltAngleSlider.getValue())
+            .embedDepth(embedDepthSlider.getValue())
+            .facetJitter(facetJitterSlider.getValue())
             .lengthJitter(lengthJitterSlider.getValue())
             .radiusJitter(radiusJitterSlider.getValue())
-            .embedDepth(embedDepthSlider.getValue())
+            .maxTiltAngleRadians(maxTiltAngleSlider.getValue())
+            .pointyTipChance(pointyTipChanceSlider.getValue())
+            .bevelTipChance(bevelTipChanceSlider.getValue())
+            .bevelDepth(bevelDepthSlider.getValue())
+            .offshootChance(offshootChanceSlider.getValue())
+            .offshootScale(offshootScaleSlider.getValue())
+            .offshootRecursion(offshootRecursionSpinner.getValue())
+            .twistAmount(twistAmountSlider.getValue())
+            .fractureChance(fractureChanceSlider.getValue())
+            .fractureDepth(fractureDepthSlider.getValue())
             .build();
     }
 
@@ -145,17 +222,33 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         if (prismSidesSpinner != null) prismSidesSpinner.getValueFactory().setValue(c.getPrismSides());
         if (maxClusterSizeSpinner != null) maxClusterSizeSpinner.getValueFactory().setValue(c.getMaxClusterSize());
         if (clusterSpreadSpinner != null) clusterSpreadSpinner.getValueFactory().setValue(c.getClusterSpread());
+        if (offshootRecursionSpinner != null) offshootRecursionSpinner.getValueFactory().setValue(c.getOffshootRecursion());
+
         if (capBaseCheck != null) capBaseCheck.setSelected(c.isCapBase());
         if (capTipCheck != null) capTipCheck.setSelected(c.isCapTip());
+
         if (minCrystalLengthSlider != null) minCrystalLengthSlider.setValue(c.getMinCrystalLength());
         if (maxCrystalLengthSlider != null) maxCrystalLengthSlider.setValue(c.getMaxCrystalLength());
         if (minCrystalRadiusSlider != null) minCrystalRadiusSlider.setValue(c.getMinCrystalRadius());
         if (maxCrystalRadiusSlider != null) maxCrystalRadiusSlider.setValue(c.getMaxCrystalRadius());
         if (tipRadiusScaleSlider != null) tipRadiusScaleSlider.setValue(c.getTipRadiusScale());
-        if (maxTiltAngleSlider != null) maxTiltAngleSlider.setValue(c.getMaxTiltAngleRadians());
+        if (embedDepthSlider != null) embedDepthSlider.setValue(c.getEmbedDepth());
+        if (facetJitterSlider != null) facetJitterSlider.setValue(c.getFacetJitter());
         if (lengthJitterSlider != null) lengthJitterSlider.setValue(c.getLengthJitter());
         if (radiusJitterSlider != null) radiusJitterSlider.setValue(c.getRadiusJitter());
-        if (embedDepthSlider != null) embedDepthSlider.setValue(c.getEmbedDepth());
+        if (maxTiltAngleSlider != null) maxTiltAngleSlider.setValue(c.getMaxTiltAngleRadians());
+
+        if (pointyTipChanceSlider != null) pointyTipChanceSlider.setValue(c.getPointyTipChance());
+        if (bevelTipChanceSlider != null) bevelTipChanceSlider.setValue(c.getBevelTipChance());
+        if (bevelDepthSlider != null) bevelDepthSlider.setValue(c.getBevelDepth());
+
+        if (offshootChanceSlider != null) offshootChanceSlider.setValue(c.getOffshootChance());
+        if (offshootScaleSlider != null) offshootScaleSlider.setValue(c.getOffshootScale());
+
+        if (twistAmountSlider != null) twistAmountSlider.setValue(c.getTwistAmount());
+        if (fractureChanceSlider != null) fractureChanceSlider.setValue(c.getFractureChance());
+        if (fractureDepthSlider != null) fractureDepthSlider.setValue(c.getFractureDepth());
+
         lastParams = c;
     }
 
@@ -183,10 +276,20 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
             .minCrystalRadius(0.012)
             .maxCrystalRadius(0.022)
             .tipRadiusScale(0.25)
-            .maxTiltAngleRadians(Math.toRadians(12.0))
+            .embedDepth(0.18)
+            .facetJitter(0.07)
             .lengthJitter(0.08)
             .radiusJitter(0.06)
-            .embedDepth(0.18)
+            .maxTiltAngleRadians(Math.toRadians(12.0))
+            .pointyTipChance(0.18)
+            .bevelTipChance(0.11)
+            .bevelDepth(0.08)
+            .offshootChance(0.12)
+            .offshootScale(0.46)
+            .offshootRecursion(1)
+            .twistAmount(Math.toRadians(10.0))
+            .fractureChance(0.18)
+            .fractureDepth(0.13)
             .build();
     }
 
@@ -209,10 +312,20 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
             .minCrystalRadius(0.012)
             .maxCrystalRadius(0.022)
             .tipRadiusScale(0.25)
-            .maxTiltAngleRadians(Math.toRadians(12.0))
+            .embedDepth(0.18)
+            .facetJitter(0.07)
             .lengthJitter(0.08)
             .radiusJitter(0.06)
-            .embedDepth(0.18)
+            .maxTiltAngleRadians(Math.toRadians(12.0))
+            .pointyTipChance(0.18)
+            .bevelTipChance(0.11)
+            .bevelDepth(0.08)
+            .offshootChance(0.12)
+            .offshootScale(0.46)
+            .offshootRecursion(1)
+            .twistAmount(Math.toRadians(10.0))
+            .fractureChance(0.18)
+            .fractureDepth(0.13)
             .build();
     }
 
