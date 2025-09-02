@@ -2,6 +2,7 @@ package AsteroidField.asteroids.providers;
 
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.geometry.IcosphereDeformer;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,18 @@ public interface AsteroidMeshProvider {
         }
     }
     
+    static void register(AsteroidMeshProvider provider) {
+        PROVIDERS.put(provider.getDisplayName(), provider);
+    }
+
+    static Collection<AsteroidMeshProvider> getAllRegisteredProviders() {
+        return PROVIDERS.values();
+    }
+
+    static AsteroidMeshProvider getByName(String name) {
+        return PROVIDERS.get(name);
+    }
+    
     // Ordered mapping: name → provider
     public static final Map<String, AsteroidMeshProvider> PROVIDERS = createProviders();
 
@@ -45,7 +58,7 @@ public interface AsteroidMeshProvider {
         map.put("Spiky", new SpikyAsteroidMeshProvider());
         map.put("Cratered", new CrateredAsteroidMeshProvider());
         map.put("Capsule", new CapsuleAsteroidMeshProvider());
-
+        map.put("Kryptonite", new KryptoniteClusterProvider());
         return map;
     }
 }

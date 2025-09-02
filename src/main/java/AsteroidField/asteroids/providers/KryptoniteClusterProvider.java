@@ -1,19 +1,24 @@
 package AsteroidField.asteroids.providers;
 
 import AsteroidField.asteroids.AsteroidFamilyUI;
+import AsteroidField.asteroids.geometry.KryptoniteClusterMesh;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
-import AsteroidField.asteroids.parameters.CrystallineAsteroidParameters;
-import AsteroidField.asteroids.geometry.CrystallineMesh;
+import AsteroidField.asteroids.parameters.KryptoniteClusterParameters;
 import javafx.scene.Node;
+import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.TriangleMesh;
-import java.util.function.Consumer;
-import javafx.scene.control.*;
 import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
+import java.util.function.Consumer;
 
-public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
+public class KryptoniteClusterProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
 
+    // Kryptonite cluster-specific GUI controls
+    private Spinner<Integer> numClustersSpinner, crystalsPerClusterSpinner;
+    private Slider diskAngleSlider;
+
+    // Crystalline family controls (as in base)
     private Spinner<Integer> crystalCountSpinner, prismSidesSpinner, maxClusterSizeSpinner, clusterSpreadSpinner, offshootRecursionSpinner;
     private CheckBox capBaseCheck, capTipCheck;
     private Slider minCrystalLengthSlider, maxCrystalLengthSlider;
@@ -23,23 +28,36 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
     private Slider pointyTipChanceSlider, bevelTipChanceSlider, bevelDepthSlider;
     private Slider offshootChanceSlider, offshootScaleSlider;
     private Slider twistAmountSlider, fractureChanceSlider, fractureDepthSlider;
-    private Consumer<AsteroidParameters> onChangeCallback;
-    private CrystallineAsteroidParameters lastParams = null;
 
-    @Override
-    public TriangleMesh generateMesh(AsteroidParameters baseParams) {
-        CrystallineAsteroidParameters params = (CrystallineAsteroidParameters) baseParams;
-        return new CrystallineMesh(params.getRadius(), params.getSubdivisions(), params);
-    }
+    private Consumer<AsteroidParameters> onChangeCallback;
+    private KryptoniteClusterParameters lastParams = null;
+
+@Override
+public TriangleMesh generateMesh(AsteroidParameters baseParams) {
+    System.out.println("KryptoniteClusterProvider.generateMesh() CALLED!");
+    System.out.println("generateMesh() param type: " + baseParams.getClass().getName());
+
+    KryptoniteClusterParameters params = (KryptoniteClusterParameters) baseParams;
+    TriangleMesh mesh = new KryptoniteClusterMesh(params);
+    System.out.println("Returning KryptoniteClusterMesh: " + mesh.getClass().getSimpleName());
+    return mesh;
+}
 
     @Override
     public Node createDynamicControls(AsteroidParameters startParams, Consumer<AsteroidParameters> onChange) {
         this.onChangeCallback = onChange;
-        CrystallineAsteroidParameters cur = (startParams instanceof CrystallineAsteroidParameters)
-                ? (CrystallineAsteroidParameters) startParams
-                : (CrystallineAsteroidParameters) getDefaultParameters();
+        KryptoniteClusterParameters cur = (startParams instanceof KryptoniteClusterParameters)
+                ? (KryptoniteClusterParameters) startParams
+                : (KryptoniteClusterParameters) getDefaultParameters();
         lastParams = cur;
 
+        // Kryptonite-specific controls
+        numClustersSpinner = new Spinner<>(1, 8, cur.getNumClusters());
+        crystalsPerClusterSpinner = new Spinner<>(3, 60, cur.getCrystalsPerCluster());
+        diskAngleSlider = new Slider(5.0, 60.0, cur.getDiskAngleDegrees());
+        diskAngleSlider.setShowTickLabels(true);
+
+        // Crystalline controls (reuse from base provider)
         crystalCountSpinner = new Spinner<>(1, 200, cur.getCrystalCount());
         prismSidesSpinner = new Spinner<>(3, 16, cur.getPrismSides());
         maxClusterSizeSpinner = new Spinner<>(1, 12, cur.getMaxClusterSize());
@@ -73,6 +91,7 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         fractureChanceSlider = new Slider(0.0, 1.0, cur.getFractureChance());
         fractureDepthSlider = new Slider(0.0, 0.3, cur.getFractureDepth());
 
+        // Set tick labels for all sliders (as before)
         minCrystalLengthSlider.setShowTickLabels(true);
         maxCrystalLengthSlider.setShowTickLabels(true);
         minCrystalRadiusSlider.setShowTickLabels(true);
@@ -93,6 +112,10 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         fractureDepthSlider.setShowTickLabels(true);
 
         ChangeListener<Object> update = (obs, oldV, newV) -> fireParamsChanged();
+
+        numClustersSpinner.valueProperty().addListener(update);
+        crystalsPerClusterSpinner.valueProperty().addListener(update);
+        diskAngleSlider.valueProperty().addListener(update);
 
         crystalCountSpinner.valueProperty().addListener(update);
         prismSidesSpinner.valueProperty().addListener(update);
@@ -126,6 +149,11 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         fractureDepthSlider.valueProperty().addListener(update);
 
         VBox controls = new VBox(
+            new Label("Kryptonite Cluster Controls"),
+            new VBox(5, new Label("Number of Clusters:"), numClustersSpinner),
+            new VBox(5, new Label("Crystals Per Cluster:"), crystalsPerClusterSpinner),
+            new VBox(5, new Label("Cluster Disk Angle (degrees):"), diskAngleSlider),
+            new Separator(),
             new Label("Crystal Family Controls"),
             new VBox(5, new Label("Crystal Count:"), crystalCountSpinner),
             new VBox(5, new Label("Prism Sides:"), prismSidesSpinner),
@@ -177,17 +205,20 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
         }
     }
 
-    private CrystallineAsteroidParameters buildUpdatedParamsFromControls() {
+    private KryptoniteClusterParameters buildUpdatedParamsFromControls() {
         double minLen = minCrystalLengthSlider.getValue();
         double maxLen = Math.max(minLen, maxCrystalLengthSlider.getValue());
         double minRad = minCrystalRadiusSlider.getValue();
         double maxRad = Math.max(minRad, maxCrystalRadiusSlider.getValue());
-        return new CrystallineAsteroidParameters.Builder<>()
+        return new KryptoniteClusterParameters.Builder()
+            .numClusters(numClustersSpinner.getValue())
+            .crystalsPerCluster(crystalsPerClusterSpinner.getValue())
+            .diskAngleDegrees(diskAngleSlider.getValue())
             .radius(lastParams != null ? lastParams.getRadius() : 100)
             .subdivisions(lastParams != null ? lastParams.getSubdivisions() : 2)
             .deformation(lastParams != null ? lastParams.getDeformation() : 0.3)
             .seed(lastParams != null ? lastParams.getSeed() : System.nanoTime())
-            .familyName("Crystalline")
+            .familyName("Kryptonite")
             .crystalCount(crystalCountSpinner.getValue())
             .prismSides(prismSidesSpinner.getValue())
             .capBase(capBaseCheck.isSelected())
@@ -218,8 +249,12 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
 
     @Override
     public void setControlsFromParams(AsteroidParameters params) {
-        if (!(params instanceof CrystallineAsteroidParameters)) return;
-        CrystallineAsteroidParameters c = (CrystallineAsteroidParameters) params;
+        if (!(params instanceof KryptoniteClusterParameters)) return;
+        KryptoniteClusterParameters c = (KryptoniteClusterParameters) params;
+        if (numClustersSpinner != null) numClustersSpinner.getValueFactory().setValue(c.getNumClusters());
+        if (crystalsPerClusterSpinner != null) crystalsPerClusterSpinner.getValueFactory().setValue(c.getCrystalsPerCluster());
+        if (diskAngleSlider != null) diskAngleSlider.setValue(c.getDiskAngleDegrees());
+
         if (crystalCountSpinner != null) crystalCountSpinner.getValueFactory().setValue(c.getCrystalCount());
         if (prismSidesSpinner != null) prismSidesSpinner.getValueFactory().setValue(c.getPrismSides());
         if (maxClusterSizeSpinner != null) maxClusterSizeSpinner.getValueFactory().setValue(c.getMaxClusterSize());
@@ -261,78 +296,84 @@ public class CrystallineAsteroidMeshProvider implements AsteroidMeshProvider, As
 
     @Override
     public AsteroidParameters getDefaultParameters() {
-        return new CrystallineAsteroidParameters.Builder<>()
+        return new KryptoniteClusterParameters.Builder()
+            .numClusters(1)
+            .crystalsPerCluster(20)
+            .diskAngleDegrees(24.0)
             .radius(100)
             .subdivisions(2)
             .deformation(0.3)
             .seed(System.nanoTime())
-            .familyName("Crystalline")
-            .crystalCount(12)
+            .familyName("Kryptonite")
+            .crystalCount(24)
             .prismSides(6)
             .capBase(true)
             .capTip(true)
-            .maxClusterSize(2)
+            .maxClusterSize(12)
             .clusterSpread(1)
-            .minCrystalLength(0.04)
-            .maxCrystalLength(0.11)
+            .minCrystalLength(0.13)
+            .maxCrystalLength(0.39)
             .minCrystalRadius(0.012)
-            .maxCrystalRadius(0.022)
-            .tipRadiusScale(0.25)
-            .embedDepth(0.18)
-            .facetJitter(0.07)
-            .lengthJitter(0.08)
-            .radiusJitter(0.06)
-            .maxTiltAngleRadians(Math.toRadians(12.0))
-            .pointyTipChance(0.18)
-            .bevelTipChance(0.11)
-            .bevelDepth(0.08)
-            .offshootChance(0.12)
-            .offshootScale(0.46)
+            .maxCrystalRadius(0.044)
+            .tipRadiusScale(0.13)
+            .embedDepth(0.10)
+            .facetJitter(0.23)
+            .lengthJitter(0.24)
+            .radiusJitter(0.17)
+            .maxTiltAngleRadians(Math.toRadians(29.0))
+            .pointyTipChance(0.52)
+            .bevelTipChance(0.19)
+            .bevelDepth(0.15)
+            .offshootChance(0.19)
+            .offshootScale(0.57)
             .offshootRecursion(1)
             .twistAmount(Math.toRadians(10.0))
-            .fractureChance(0.18)
-            .fractureDepth(0.13)
+            .fractureChance(0.14)
+            .fractureDepth(0.11)
             .build();
     }
 
     @Override
     public AsteroidParameters buildDefaultParamsFrom(AsteroidParameters previous) {
-        return new CrystallineAsteroidParameters.Builder<>()
+        return new KryptoniteClusterParameters.Builder()
+            .numClusters(1)
+            .crystalsPerCluster(20)
+            .diskAngleDegrees(24.0)
             .radius(previous.getRadius())
             .subdivisions(previous.getSubdivisions())
             .deformation(previous.getDeformation())
             .seed(System.nanoTime())
-            .familyName("Crystalline")
-            .crystalCount(12)
+            .familyName("Kryptonite")
+            .crystalCount(24)
             .prismSides(6)
             .capBase(true)
             .capTip(true)
-            .maxClusterSize(2)
+            .maxClusterSize(12)
             .clusterSpread(1)
-            .minCrystalLength(0.04)
-            .maxCrystalLength(0.11)
+            .minCrystalLength(0.13)
+            .maxCrystalLength(0.39)
             .minCrystalRadius(0.012)
-            .maxCrystalRadius(0.022)
-            .tipRadiusScale(0.25)
-            .embedDepth(0.18)
-            .facetJitter(0.07)
-            .lengthJitter(0.08)
-            .radiusJitter(0.06)
-            .maxTiltAngleRadians(Math.toRadians(12.0))
-            .pointyTipChance(0.18)
-            .bevelTipChance(0.11)
-            .bevelDepth(0.08)
-            .offshootChance(0.12)
-            .offshootScale(0.46)
+            .maxCrystalRadius(0.044)
+            .tipRadiusScale(0.13)
+            .embedDepth(0.10)
+            .facetJitter(0.23)
+            .lengthJitter(0.24)
+            .radiusJitter(0.17)
+            .maxTiltAngleRadians(Math.toRadians(29.0))
+            .pointyTipChance(0.52)
+            .bevelTipChance(0.19)
+            .bevelDepth(0.15)
+            .offshootChance(0.19)
+            .offshootScale(0.57)
             .offshootRecursion(1)
             .twistAmount(Math.toRadians(10.0))
-            .fractureChance(0.18)
-            .fractureDepth(0.13)
+            .fractureChance(0.14)
+            .fractureDepth(0.11)
             .build();
     }
 
     @Override
     public String getDisplayName() {
-        return "Crystalline";
+        return "Kryptonite";
     }
 }

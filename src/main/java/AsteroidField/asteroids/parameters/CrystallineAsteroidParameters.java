@@ -1,6 +1,13 @@
 package AsteroidField.asteroids.parameters;
 
+/**
+ * Parameters for procedural crystalline asteroids.
+ * <p>
+ * Uses a generic builder for extensibility and subclassing.
+ * </p>
+ */
 public class CrystallineAsteroidParameters extends AsteroidParameters {
+
     // Crystal shape/count
     private final int crystalCount;
     private final int prismSides;
@@ -15,27 +22,31 @@ public class CrystallineAsteroidParameters extends AsteroidParameters {
     private final double tipRadiusScale;
 
     // Embedding, clustering, faceting
-    private final double embedDepth;        // Fraction of base radius to embed
-    private final double facetJitter;       // 0..0.3, per-vertex radial jitter
+    private final double embedDepth;
+    private final double facetJitter;
     private final double lengthJitter, radiusJitter;
     private final double maxTiltAngleRadians;
 
     // Tip/termination shaping
-    private final double pointyTipChance;   // 0..1: chance to terminate as a single point
-    private final double bevelTipChance;    // 0..1: chance to create a flat beveled tip
-    private final double bevelDepth;        // Fraction of length to bevel (if beveled tip)
+    private final double pointyTipChance;
+    private final double bevelTipChance;
+    private final double bevelDepth;
 
     // Crystal offshoots
-    private final double offshootChance;    // 0..1: chance to spawn an offshoot crystal
-    private final double offshootScale;     // 0..1: length/radius scaling of offshoot
-    private final int offshootRecursion;    // How many generations deep can offshoots go
+    private final double offshootChance;
+    private final double offshootScale;
+    private final int offshootRecursion;
 
     // Advanced effects
-    private final double twistAmount;       // Max twist per ring (radians)
-    private final double fractureChance;    // Chance to apply a fracture to a crystal
-    private final double fractureDepth;     // How far to offset vertices in a fracture (fraction of base radius)
+    private final double twistAmount;
+    private final double fractureChance;
+    private final double fractureDepth;
 
-    public static class Builder extends AsteroidParameters.Builder<Builder> {
+    /**
+     * Generic builder pattern for subclassing and fluent usage.
+     * @param <T> The builder subclass type.
+     */
+    public static class Builder<T extends Builder<T>> extends AsteroidParameters.Builder<T> {
         private int crystalCount = 12;
         private int prismSides = 6;
         private boolean capBase = true;
@@ -64,39 +75,40 @@ public class CrystallineAsteroidParameters extends AsteroidParameters {
         private double fractureChance = 0.18;
         private double fractureDepth = 0.13;
 
-        public Builder crystalCount(int n) { this.crystalCount = n; return this; }
-        public Builder prismSides(int n) { this.prismSides = n; return this; }
-        public Builder capBase(boolean b) { this.capBase = b; return this; }
-        public Builder capTip(boolean b) { this.capTip = b; return this; }
-        public Builder maxClusterSize(int n) { this.maxClusterSize = n; return this; }
-        public Builder clusterSpread(int n) { this.clusterSpread = n; return this; }
-        public Builder minCrystalLength(double d) { this.minCrystalLength = d; return this; }
-        public Builder maxCrystalLength(double d) { this.maxCrystalLength = d; return this; }
-        public Builder minCrystalRadius(double d) { this.minCrystalRadius = d; return this; }
-        public Builder maxCrystalRadius(double d) { this.maxCrystalRadius = d; return this; }
-        public Builder tipRadiusScale(double d) { this.tipRadiusScale = d; return this; }
-        public Builder embedDepth(double d) { this.embedDepth = d; return this; }
-        public Builder facetJitter(double d) { this.facetJitter = d; return this; }
-        public Builder lengthJitter(double d) { this.lengthJitter = d; return this; }
-        public Builder radiusJitter(double d) { this.radiusJitter = d; return this; }
-        public Builder maxTiltAngleRadians(double d) { this.maxTiltAngleRadians = d; return this; }
-        public Builder pointyTipChance(double d) { this.pointyTipChance = d; return this; }
-        public Builder bevelTipChance(double d) { this.bevelTipChance = d; return this; }
-        public Builder bevelDepth(double d) { this.bevelDepth = d; return this; }
-        public Builder offshootChance(double d) { this.offshootChance = d; return this; }
-        public Builder offshootScale(double d) { this.offshootScale = d; return this; }
-        public Builder offshootRecursion(int n) { this.offshootRecursion = n; return this; }
-        public Builder twistAmount(double d) { this.twistAmount = d; return this; }
-        public Builder fractureChance(double d) { this.fractureChance = d; return this; }
-        public Builder fractureDepth(double d) { this.fractureDepth = d; return this; }
+        // --- Fluent setters returning T ---
+        public T crystalCount(int n) { this.crystalCount = n; return self(); }
+        public T prismSides(int n) { this.prismSides = n; return self(); }
+        public T capBase(boolean b) { this.capBase = b; return self(); }
+        public T capTip(boolean b) { this.capTip = b; return self(); }
+        public T maxClusterSize(int n) { this.maxClusterSize = n; return self(); }
+        public T clusterSpread(int n) { this.clusterSpread = n; return self(); }
+        public T minCrystalLength(double d) { this.minCrystalLength = d; return self(); }
+        public T maxCrystalLength(double d) { this.maxCrystalLength = d; return self(); }
+        public T minCrystalRadius(double d) { this.minCrystalRadius = d; return self(); }
+        public T maxCrystalRadius(double d) { this.maxCrystalRadius = d; return self(); }
+        public T tipRadiusScale(double d) { this.tipRadiusScale = d; return self(); }
+        public T embedDepth(double d) { this.embedDepth = d; return self(); }
+        public T facetJitter(double d) { this.facetJitter = d; return self(); }
+        public T lengthJitter(double d) { this.lengthJitter = d; return self(); }
+        public T radiusJitter(double d) { this.radiusJitter = d; return self(); }
+        public T maxTiltAngleRadians(double d) { this.maxTiltAngleRadians = d; return self(); }
+        public T pointyTipChance(double d) { this.pointyTipChance = d; return self(); }
+        public T bevelTipChance(double d) { this.bevelTipChance = d; return self(); }
+        public T bevelDepth(double d) { this.bevelDepth = d; return self(); }
+        public T offshootChance(double d) { this.offshootChance = d; return self(); }
+        public T offshootScale(double d) { this.offshootScale = d; return self(); }
+        public T offshootRecursion(int n) { this.offshootRecursion = n; return self(); }
+        public T twistAmount(double d) { this.twistAmount = d; return self(); }
+        public T fractureChance(double d) { this.fractureChance = d; return self(); }
+        public T fractureDepth(double d) { this.fractureDepth = d; return self(); }
 
         @Override
         public CrystallineAsteroidParameters build() { return new CrystallineAsteroidParameters(this); }
         @Override
-        protected Builder self() { return this; }
+        protected T self() { return (T) this; }
     }
 
-    private CrystallineAsteroidParameters(Builder b) {
+    public CrystallineAsteroidParameters(Builder<?> b) {
         super(b);
         this.crystalCount = b.crystalCount;
         this.prismSides = b.prismSides;
@@ -152,8 +164,8 @@ public class CrystallineAsteroidParameters extends AsteroidParameters {
     public double getFractureDepth() { return fractureDepth; }
 
     @Override
-    public CrystallineAsteroidParameters.Builder toBuilder() {
-        return new CrystallineAsteroidParameters.Builder()
+    public Builder<?> toBuilder() {
+        return new Builder<>()
             .radius(getRadius())
             .subdivisions(getSubdivisions())
             .deformation(getDeformation())

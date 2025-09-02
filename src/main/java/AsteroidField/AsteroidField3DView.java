@@ -33,6 +33,7 @@ import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
+import javafx.scene.shape.CullFace;
 
 public class AsteroidField3DView extends Pane {
 
@@ -80,12 +81,14 @@ public class AsteroidField3DView extends Pane {
         asteroidView = new MeshView();
         asteroidView.setMaterial(new PhongMaterial(Color.GAINSBORO));
         asteroidView.setDrawMode(DrawMode.FILL);
+        asteroidView.setCullFace(CullFace.NONE);
         world.getChildren().add(asteroidView);
 
         asteroidLinesView = new MeshView();
         asteroidLinesView.setMaterial(new PhongMaterial(Color.ALICEBLUE));
         asteroidLinesView.setDrawMode(DrawMode.LINE);
         asteroidLinesView.setMouseTransparent(true);
+        asteroidLinesView.setCullFace(CullFace.NONE);
         world.getChildren().add(asteroidLinesView);
         Bindings.bindContent(asteroidLinesView.getTransforms(), asteroidView.getTransforms());
 

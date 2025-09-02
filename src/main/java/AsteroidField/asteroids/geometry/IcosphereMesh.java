@@ -103,7 +103,6 @@ public class IcosphereMesh extends TriangleMesh {
     private static long getEdgeKey(int a, int b) {
         return (long)Math.min(a, b) << 32 | Math.max(a, b);
     }
-
     private static int getMiddlePoint(int a, int b, List<double[]> verts, Map<Long, Integer> cache, double radius) {
         long key = getEdgeKey(a, b);
         if (cache.containsKey(key)) return cache.get(key);
@@ -124,7 +123,6 @@ public class IcosphereMesh extends TriangleMesh {
         cache.put(key, idx);
         return idx;
     }
-
     public float[] getVertsArray() { return verts; }
     public List<float[]> getVertsList() { return vertsList; }
     public int[] getFacesArray() { return faces; }
