@@ -1,70 +1,116 @@
 package AsteroidField.asteroids.providers;
 
+import AsteroidField.asteroids.AsteroidFamilyUI;
+import AsteroidField.asteroids.geometry.CubicMesh;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
+import AsteroidField.asteroids.parameters.CubicAsteroidParameters;
+import javafx.scene.Node;
+import javafx.scene.layout.VBox;
 import javafx.scene.shape.TriangleMesh;
-import java.util.Random;
+import javafx.beans.value.ChangeListener;
+import javafx.geometry.Insets;
+import java.util.function.Consumer;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
 
-public class CubicAsteroidMeshProvider implements AsteroidMeshProvider {
+public class CubicAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
+    private Spinner<Integer> subdivisionsSpinner;
+    private Slider deformationSlider;
+    private Consumer<AsteroidParameters> onChangeCallback;
+    private CubicAsteroidParameters lastParams = null;
+
     @Override
-    public TriangleMesh generateMesh(AsteroidParameters params) {
-        float size = (float) params.getRadius();
-        float def = (float) params.getDeformation();
-        Random rng = new Random(params.getSeed());
+    public TriangleMesh generateMesh(AsteroidParameters baseParams) {
+        CubicAsteroidParameters params = (CubicAsteroidParameters) baseParams;
+        return new CubicMesh(params.getRadius(), params.getSubdivisions(), params);
+    }
 
-        // 8 cube vertices
-        float[][] verts = {
-            { -size, -size, -size }, {  size, -size, -size },
-            {  size,  size, -size }, { -size,  size, -size },
-            { -size, -size,  size }, {  size, -size,  size },
-            {  size,  size,  size }, { -size,  size,  size }
-        };
+    @Override
+    public Node createDynamicControls(AsteroidParameters startParams, Consumer<AsteroidParameters> onChange) {
+        this.onChangeCallback = onChange;
+        CubicAsteroidParameters cur = (startParams instanceof CubicAsteroidParameters)
+                ? (CubicAsteroidParameters) startParams
+                : (CubicAsteroidParameters) getDefaultParameters();
+        lastParams = cur;
 
-        // Perturb vertices
-        for (float[] v : verts) {
-            v[0] += def * size * (rng.nextFloat() - 0.5f) * 2;
-            v[1] += def * size * (rng.nextFloat() - 0.5f) * 2;
-            v[2] += def * size * (rng.nextFloat() - 0.5f) * 2;
+        subdivisionsSpinner = new Spinner<>(0, 6, cur.getSubdivisions());
+        deformationSlider = new Slider(0.0, 0.6, cur.getDeformation());
+        deformationSlider.setShowTickLabels(true);
+
+        ChangeListener<Object> update = (obs, oldV, newV) -> fireParamsChanged();
+
+        subdivisionsSpinner.valueProperty().addListener(update);
+        deformationSlider.valueProperty().addListener(update);
+
+        VBox controls = new VBox(
+            new Label("Cubic Asteroid Controls"),
+            new VBox(5, new Label("Subdivisions:"), subdivisionsSpinner),
+            new VBox(5, new Label("Deformation:"), deformationSlider)
+        );
+        setControlsFromParams(cur);
+        controls.setSpacing(8);
+        controls.setPadding(new Insets(10));
+        return controls;
+    }
+
+    private void fireParamsChanged() {
+        lastParams = buildUpdatedParamsFromControls();
+        if (onChangeCallback != null) {
+            onChangeCallback.accept(lastParams);
         }
+    }
 
-        // Cube faces (each face = 2 triangles)
-        int[][] faces = {
-            {0,1,2}, {0,2,3}, // back
-            {4,7,5}, {5,7,6}, // front
-            {0,4,1}, {1,4,5}, // bottom
-            {2,6,7}, {2,7,3}, // top
-            {0,3,4}, {4,3,7}, // left
-            {1,5,6}, {1,6,2}  // right
-        };
+    private CubicAsteroidParameters buildUpdatedParamsFromControls() {
+        return new CubicAsteroidParameters.Builder()
+            .radius(lastParams != null ? lastParams.getRadius() : 100)
+            .subdivisions(lastParams != null ? lastParams.getSubdivisions() : 2)
+            .deformation(lastParams != null ? lastParams.getDeformation() : 0.1)
+            .seed(lastParams != null ? lastParams.getSeed() : System.nanoTime())
+            .familyName("Cubic")
+            .build();
+    }
 
-        // Build mesh arrays
-        float[] meshVerts = new float[8*3];
-        for (int i=0; i<8; i++) {
-            meshVerts[i*3]   = verts[i][0];
-            meshVerts[i*3+1] = verts[i][1];
-            meshVerts[i*3+2] = verts[i][2];
-        }
+    @Override
+    public void setControlsFromParams(AsteroidParameters params) {
+        if (!(params instanceof CubicAsteroidParameters)) return;
+        CubicAsteroidParameters c = (CubicAsteroidParameters) params;
+        if (subdivisionsSpinner != null) 
+            subdivisionsSpinner.getValueFactory().setValue(c.getSubdivisions());
+        if (deformationSlider != null) 
+            deformationSlider.setValue(c.getDeformation());
+        lastParams = c;
+    }
 
-        int[] meshFaces = new int[faces.length*6];
-        for (int i=0; i<faces.length; i++) {
-            int[] f = faces[i];
-            meshFaces[i*6]   = f[0]; meshFaces[i*6+1] = 0;
-            meshFaces[i*6+2] = f[1]; meshFaces[i*6+3] = 0;
-            meshFaces[i*6+4] = f[2]; meshFaces[i*6+5] = 0;
-        }
+    @Override
+    public AsteroidParameters getParamsFromControls() {
+        return buildUpdatedParamsFromControls();
+    }
 
-        TriangleMesh mesh = new TriangleMesh();
-        mesh.getPoints().setAll(meshVerts);
-        mesh.getTexCoords().addAll(0,0);
-        mesh.getFaces().setAll(meshFaces);
+    @Override
+    public AsteroidParameters getDefaultParameters() {
+        return new CubicAsteroidParameters.Builder()
+            .radius(100)
+            .subdivisions(1)
+            .deformation(0.12)
+            .seed(System.nanoTime())
+            .familyName("Cubic")
+            .build();
+    }
 
-        // Smoothing group: make each face "flat" for hard cube look,
-        // or set all to same for smooth (try both for fun!)
-        mesh.getFaceSmoothingGroups().clear();
-        for (int i = 0; i < faces.length; i++) {
-            mesh.getFaceSmoothingGroups().addAll(0); // Flat shaded (0)
-            // Or try 1 for all-smooth
-        }
+    @Override
+    public AsteroidParameters buildDefaultParamsFrom(AsteroidParameters previous) {
+        return new CubicAsteroidParameters.Builder()
+            .radius(previous.getRadius())
+            .subdivisions(1)
+            .deformation(0.12)
+            .seed(System.nanoTime())
+            .familyName("Cubic")
+            .build();
+    }
 
-        return mesh;
+    @Override
+    public String getDisplayName() {
+        return "Cubic";
     }
 }

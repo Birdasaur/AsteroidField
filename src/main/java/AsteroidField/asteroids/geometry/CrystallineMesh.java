@@ -7,7 +7,7 @@ public class CrystallineMesh extends IcosphereMesh {
 
 public CrystallineMesh(double radius, int subdivisions, CrystallineAsteroidParameters params) {
     super(radius, subdivisions);
-    System.out.println("CrystallineMesh CONSTRUCTOR CALLED! Type: " + this.getClass().getSimpleName());
+    //@DEBUG SMP System.out.println("CrystallineMesh CONSTRUCTOR CALLED! Type: " + this.getClass().getSimpleName());
     deform(params);
 }
 
@@ -50,7 +50,7 @@ public CrystallineMesh(double radius, int subdivisions, CrystallineAsteroidParam
 
         int nVerts = vertsList.size();
         if (crystalCount > nVerts) {
-            System.out.println("Warning: Requested " + crystalCount + " crystals but only " + nVerts + " unique vertices available. Capping count.");
+            //@DEBUG SMP System.out.println("Warning: Requested " + crystalCount + " crystals but only " + nVerts + " unique vertices available. Capping count.");
             crystalCount = nVerts;
         }
 
@@ -196,8 +196,9 @@ public CrystallineMesh(double radius, int subdivisions, CrystallineAsteroidParam
         boolean pointyOk = (tipRingSize == 1);
 
         if (!baseOk || (!pointy && !tipOk) || (pointy && !pointyOk)) {
-            System.out.println("Skipping degenerate crystal: baseRing.size()=" + baseRingSize +
-                    ", tipRing.size()=" + tipRingSize + ", sides=" + sides + ", pointy=" + pointy);
+            //@DEBUG SMP 
+            //System.out.println("Skipping degenerate crystal: baseRing.size()=" + baseRingSize +
+            //        ", tipRing.size()=" + tipRingSize + ", sides=" + sides + ", pointy=" + pointy);
             return;
         }
 
@@ -251,8 +252,9 @@ public CrystallineMesh(double radius, int subdivisions, CrystallineAsteroidParam
                 allFaceRefs.add(new FaceRef(a, aUV, d, dUV, c, cUV));
             }
         } else {
-            System.out.println("Warning: Not generating faces, ring size mismatch: baseRing=" + baseRingSize +
-                    ", tipRing=" + tipRingSize + ", sides=" + sides + ", pointy=" + pointy);
+            //@DEBUG SMP 
+//            System.out.println("Warning: Not generating faces, ring size mismatch: baseRing=" + baseRingSize +
+//                    ", tipRing=" + tipRingSize + ", sides=" + sides + ", pointy=" + pointy);
         }
 
         // Cap base (use asteroid base UV for center)
@@ -311,6 +313,7 @@ public CrystallineMesh(double radius, int subdivisions, CrystallineAsteroidParam
         double deform = params.getDeformation();
         if (deform == 0) return;
         Random rng = new Random(params.getSeed() ^ 0xF00DF00D);
+//Clean up poles and avoid degenerate faces
 for (int i = 0; i < vertsList.size(); i++) {
     float[] v = vertsList.get(i);
     double len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);

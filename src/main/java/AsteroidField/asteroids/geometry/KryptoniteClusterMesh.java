@@ -8,7 +8,7 @@ public class KryptoniteClusterMesh extends CrystallineMesh {
 
 public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
     super(params.getRadius(), params.getSubdivisions(), params);
-    System.out.println("KryptoniteClusterMesh CONSTRUCTOR CALLED!");
+    //@DEBUG SMP System.out.println("KryptoniteClusterMesh CONSTRUCTOR CALLED!");
     this.deform(params);
 }
 
@@ -18,7 +18,7 @@ public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
         setupBaseTexCoords(baseParams);
 
         KryptoniteClusterParameters params = (KryptoniteClusterParameters) baseParams;
-        System.out.println("KryptoniteClusterMesh.deform() called.");
+        //@DEBUG SMP System.out.println("KryptoniteClusterMesh.deform() called.");
 
         deformBaseIcosphere(params);
         Random rng = new Random(params.getSeed());
@@ -38,12 +38,13 @@ public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
             );
             allBases.addAll(clusterBases);
         }
-        int crystalCount = allBases.size();
-        System.out.println("KryptoniteClusterMesh: Sampled " + crystalCount + " cluster bases.");
-        for (int i = 0; i < allBases.size(); i++) {
-            float[] v = allBases.get(i);
-            System.out.printf("  Base %d: (%.2f, %.2f, %.2f)%n", i, v[0], v[1], v[2]);
-        }
+//@DEBUG SMP 
+//        int crystalCount = allBases.size();
+//        System.out.println("KryptoniteClusterMesh: Sampled " + crystalCount + " cluster bases.");
+//        for (int i = 0; i < allBases.size(); i++) {
+//            float[] v = allBases.get(i);
+//            System.out.printf("  Base %d: (%.2f, %.2f, %.2f)%n", i, v[0], v[1], v[2]);
+//        }
 
         List<float[]> allVerts = new ArrayList<>(vertsList);
         List<FaceRef> allFaceRefs = new ArrayList<>();
@@ -66,8 +67,9 @@ public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
             int paletteIdx = (crystalCounter-1) % paletteRows;
             double paletteV = (paletteIdx + 0.5) / paletteRows;
             float[] normal = getNormalForBase(base);
-            System.out.printf("Crystal %d: base (%.2f, %.2f, %.2f), normal (%.2f, %.2f, %.2f), paletteV=%.2f%n",
-                    crystalCounter, base[0], base[1], base[2], normal[0], normal[1], normal[2], paletteV);
+//@DEBUG SMP 
+//            System.out.printf("Crystal %d: base (%.2f, %.2f, %.2f), normal (%.2f, %.2f, %.2f), paletteV=%.2f%n",
+//                    crystalCounter, base[0], base[1], base[2], normal[0], normal[1], normal[2], paletteV);
 
             // Defensive: try/catch to log any geometry errors
             try {
@@ -83,9 +85,9 @@ public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
 
         int vertsAfter = allVerts.size();
         int facesAfter = allFaceRefs.size();
-
-        System.out.printf("Mesh verts: %d -> %d (added %d)\n", vertsBefore, vertsAfter, vertsAfter - vertsBefore);
-        System.out.printf("Mesh faces: %d -> %d (added %d)\n", facesBefore, facesAfter, facesAfter - facesBefore);
+//@DEBUG SMP 
+//        System.out.printf("Mesh verts: %d -> %d (added %d)\n", vertsBefore, vertsAfter, vertsAfter - vertsBefore);
+//        System.out.printf("Mesh faces: %d -> %d (added %d)\n", facesBefore, facesAfter, facesAfter - facesBefore);
 
         // Finalize mesh data as in CrystallineMesh
         float[] newVerts = new float[allVerts.size() * 3];
@@ -117,8 +119,8 @@ public KryptoniteClusterMesh(KryptoniteClusterParameters params) {
         getFaces().setAll(newFaces);
         getFaceSmoothingGroups().clear();
         for (int i = 0; i < newFaces.length / 6; i++) getFaceSmoothingGroups().addAll(1);
-
-        System.out.println("KryptoniteClusterMesh: Mesh construction complete.");
+//@DEBUG SMP 
+        //System.out.println("KryptoniteClusterMesh: Mesh construction complete.");
     }
 
     /** Returns a normalized normal vector for a given base position. */

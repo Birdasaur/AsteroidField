@@ -34,12 +34,14 @@ public class KryptoniteClusterProvider implements AsteroidMeshProvider, Asteroid
 
 @Override
 public TriangleMesh generateMesh(AsteroidParameters baseParams) {
-    System.out.println("KryptoniteClusterProvider.generateMesh() CALLED!");
-    System.out.println("generateMesh() param type: " + baseParams.getClass().getName());
+    //@DEBUG SMP 
+//    System.out.println("KryptoniteClusterProvider.generateMesh() CALLED!");
+//    System.out.println("generateMesh() param type: " + baseParams.getClass().getName());
 
     KryptoniteClusterParameters params = (KryptoniteClusterParameters) baseParams;
     TriangleMesh mesh = new KryptoniteClusterMesh(params);
-    System.out.println("Returning KryptoniteClusterMesh: " + mesh.getClass().getSimpleName());
+//@DEBUG SMP 
+//System.out.println("Returning KryptoniteClusterMesh: " + mesh.getClass().getSimpleName());
     return mesh;
 }
 

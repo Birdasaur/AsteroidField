@@ -32,8 +32,9 @@ public class KryptoniteHelper {
             }
         }
         if (candidates.isEmpty()) {
-            System.out.println("KryptoniteHelper: No vertices found in cap for clusterDir=" +
-                Arrays.toString(clusterDir) + " angle=" + capAngleRadians);
+//@DEBUG SMP 
+//            System.out.println("KryptoniteHelper: No vertices found in cap for clusterDir=" +
+//                Arrays.toString(clusterDir) + " angle=" + capAngleRadians);
             return new ArrayList<>();
         }
         // Randomize and select count (or all available)
