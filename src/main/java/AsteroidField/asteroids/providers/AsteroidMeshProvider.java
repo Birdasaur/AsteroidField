@@ -59,6 +59,7 @@ public interface AsteroidMeshProvider {
         map.put("Cratered", new CrateredAsteroidMeshProvider());
         map.put("Capsule", new CapsuleAsteroidMeshProvider());
         map.put("Kryptonite", new KryptoniteClusterProvider());
+        map.put("Monolith", new MonolithAsteroidMeshProvider());
         return map;
     }
 }

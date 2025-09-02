@@ -61,23 +61,31 @@ public class CubicAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
         }
     }
 
-    private CubicAsteroidParameters buildUpdatedParamsFromControls() {
-        return new CubicAsteroidParameters.Builder()
-            .radius(lastParams != null ? lastParams.getRadius() : 100)
-            .subdivisions(lastParams != null ? lastParams.getSubdivisions() : 2)
-            .deformation(lastParams != null ? lastParams.getDeformation() : 0.1)
-            .seed(lastParams != null ? lastParams.getSeed() : System.nanoTime())
-            .familyName("Cubic")
-            .build();
-    }
+private CubicAsteroidParameters buildUpdatedParamsFromControls() {
+    int subdivisions = (subdivisionsSpinner != null)
+        ? subdivisionsSpinner.getValue()
+        : (lastParams != null ? lastParams.getSubdivisions() : 1);
+    double deformation = (deformationSlider != null)
+        ? deformationSlider.getValue()
+        : (lastParams != null ? lastParams.getDeformation() : 0.12);
+
+    CubicAsteroidParameters.Builder<?> b = new CubicAsteroidParameters.Builder<>()
+        .radius(lastParams != null ? lastParams.getRadius() : 100)
+        .subdivisions(subdivisions)
+        .deformation(deformation)
+        .seed(lastParams != null ? lastParams.getSeed() : System.nanoTime())
+        .familyName("Cubic");
+    return b.build();
+}
+
 
     @Override
     public void setControlsFromParams(AsteroidParameters params) {
         if (!(params instanceof CubicAsteroidParameters)) return;
         CubicAsteroidParameters c = (CubicAsteroidParameters) params;
-        if (subdivisionsSpinner != null) 
+        if (subdivisionsSpinner != null)
             subdivisionsSpinner.getValueFactory().setValue(c.getSubdivisions());
-        if (deformationSlider != null) 
+        if (deformationSlider != null)
             deformationSlider.setValue(c.getDeformation());
         lastParams = c;
     }
@@ -89,7 +97,7 @@ public class CubicAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
 
     @Override
     public AsteroidParameters getDefaultParameters() {
-        return new CubicAsteroidParameters.Builder()
+        return new CubicAsteroidParameters.Builder<>()
             .radius(100)
             .subdivisions(1)
             .deformation(0.12)
@@ -100,7 +108,7 @@ public class CubicAsteroidMeshProvider implements AsteroidMeshProvider, Asteroid
 
     @Override
     public AsteroidParameters buildDefaultParamsFrom(AsteroidParameters previous) {
-        return new CubicAsteroidParameters.Builder()
+        return new CubicAsteroidParameters.Builder<>()
             .radius(previous.getRadius())
             .subdivisions(1)
             .deformation(0.12)

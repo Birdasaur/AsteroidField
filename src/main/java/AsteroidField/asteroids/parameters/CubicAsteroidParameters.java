@@ -1,27 +1,43 @@
 package AsteroidField.asteroids.parameters;
 
+/**
+ * Parameters for cubic-based asteroids. Uses generic builder for extensible subfamilies.
+ */
 public class CubicAsteroidParameters extends AsteroidParameters {
     private final int subdivisions;
     private final double deformation;
 
-    public static class Builder extends AsteroidParameters.Builder<Builder> {
-        private int subdivisions = 0;
-        private double deformation = 0.12;
-        public Builder subdivisions(int n) { this.subdivisions = n; return self(); }
-        public Builder deformation(double d) { this.deformation = d; return self(); }
-        @Override public CubicAsteroidParameters build() { return new CubicAsteroidParameters(this); }
-        @Override protected Builder self() { return this; }
+    /** Covariant Builder pattern for subclass compatibility.
+     * @param <T> */
+    public static class Builder<T extends Builder<T>> extends AsteroidParameters.Builder<T> {
+        protected int subdivisions = 1;
+        protected double deformation = 0.12;
+        @Override
+        public T subdivisions(int n) { this.subdivisions = n; return self(); }
+        @Override
+        public T deformation(double d) { this.deformation = d; return self(); }
+        @Override
+        public CubicAsteroidParameters build() { return new CubicAsteroidParameters(this); }
+        @Override
+        protected T self() { return (T) this; }
     }
-    private CubicAsteroidParameters(Builder b) {
+
+    /** Subclass-friendly constructor
+     * @param b */
+    protected CubicAsteroidParameters(Builder<?> b) {
         super(b);
         this.subdivisions = b.subdivisions;
         this.deformation = b.deformation;
     }
-    public int getSubdivisions() { return subdivisions; }
-    public double getDeformation() { return deformation; }
+
     @Override
-    public Builder toBuilder() {
-        return new Builder()
+    public int getSubdivisions() { return subdivisions; }
+    @Override
+    public double getDeformation() { return deformation; }
+
+    @Override
+    public Builder<?> toBuilder() {
+        return new Builder<>()
             .radius(getRadius())
             .subdivisions(getSubdivisions())
             .deformation(getDeformation())
