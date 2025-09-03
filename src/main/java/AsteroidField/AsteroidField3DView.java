@@ -35,6 +35,10 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.shape.CullFace;
 
+// --- Tether imports ---
+import AsteroidField.tether.CameraKinematicAdapter;
+import AsteroidField.tether.TetherSystem;
+
 public class AsteroidField3DView extends Pane {
 
     private SubScene subScene;
@@ -66,8 +70,14 @@ public class AsteroidField3DView extends Pane {
     private FlyCameraController flyController;
     private TrackBallController trackballController;
 
+    // --- Tether system (new) ---
+    private TetherSystem tetherSystem;
+    private CameraKinematicAdapter cameraCraft;
+    private ToggleButton tetherToggle;
+
     public AsteroidField3DView() {
         world = new Group();
+        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
 
         params = new AsteroidParameters.Builder<>()
                 .radius(100)
@@ -98,25 +108,45 @@ public class AsteroidField3DView extends Pane {
         camera = new PerspectiveCamera(true);
         camera.setNearClip(0.1);
         camera.setFarClip(10000.0);
+        camera.setFieldOfView(45);
         camera.setTranslateZ(-600);
 
         subScene = new SubScene(world, 800, 600, true, SceneAntialiasing.BALANCED);
         subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
 
-        flyController = new FlyCameraController(camera, subScene);
-        flyController.setSpeed(150);
-        flyController.setBoostMultiplier(3);
-        flyController.setSensitivity(0.2);
+        // --- Wrap the camera in a kinematic rig so tethers can move it ---
+        cameraCraft = CameraKinematicAdapter.attach(subScene, world);
+        // Optional: starting point
+        // cameraCraft.setPosition(0, 0, -600); // already absorbed above
 
-        trackballController = new TrackBallController(subScene, camera, asteroidViews);
-        trackballController.setEnabled(false);
+        // --- Tether system: collidables supplier returns just the single asteroid ---
+        java.util.function.Supplier<java.util.List<javafx.scene.Node>> collidables =
+                () -> java.util.Collections.singletonList(asteroidView);
+
+        tetherSystem = new TetherSystem(
+                subScene,
+                (PerspectiveCamera) subScene.getCamera(),
+                world,
+                collidables,
+                cameraCraft
+        );
+        tetherSystem.setEnabled(false); // off by default; controlled by top-bar toggle
+        tetherSystem.getTether(0).setDebugPersistOnMiss(true);
+        tetherSystem.getTether(1).setDebugPersistOnMiss(true);
+
+//        flyController = new FlyCameraController(camera, subScene);
+//        flyController.setSpeed(150);
+//        flyController.setBoostMultiplier(3);
+//        flyController.setSensitivity(0.2);
+//        flyController.setEnabled(false);
+//
+//        trackballController = new TrackBallController(subScene, camera, asteroidViews);
+//        trackballController.setEnabled(false);
 
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
-        
-        
     }
 
     // --- TOP BAR: Scene/Application Controls ---
@@ -138,6 +168,13 @@ public class AsteroidField3DView extends Pane {
         });
         if (asteroidLinesView != null) asteroidLinesView.setVisible(wireframeToggle.isSelected());
 
+        // --- Tethers toggle (NEW) ---
+        tetherToggle = new ToggleButton("Tethers (beta)");
+        tetherToggle.setTooltip(new Tooltip("Enable/disable tether mechanic. LMB/RMB fire. Hold SHIFT to pull. CTRL to release."));
+        tetherToggle.selectedProperty().addListener((obs, was, is) -> {
+            if (tetherSystem != null) tetherSystem.setEnabled(is);
+        });
+
         asteroidSelectorBox = new ComboBox<>();
         asteroidViews.add(asteroidView);
         updateAsteroidSelectorBox();
@@ -156,9 +193,10 @@ public class AsteroidField3DView extends Pane {
         });
 
         resetCameraBtn.setOnAction(e -> {
-            camera.setTranslateX(0);
-            camera.setTranslateY(0);
-            camera.setTranslateZ(-600);
+            // Reset camera rig position (zero velocity) so the tethers test feels consistent
+            cameraCraft.resetPosition(0, 0, -600);
+
+            // Keep previous behavior of resetting camera rotation
             camera.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0, 1, 0));
             camera.setRotate(0);
             if (selectedAsteroid != null) {
@@ -176,7 +214,14 @@ public class AsteroidField3DView extends Pane {
             }
         });
 
-        topBar.getChildren().addAll(cameraModeToggle, resetCameraBtn, wireframeToggle, new Label("Asteroid:"), asteroidSelectorBox);
+        topBar.getChildren().addAll(
+                cameraModeToggle,
+                resetCameraBtn,
+                wireframeToggle,
+                tetherToggle,
+                new Label("Asteroid:"),
+                asteroidSelectorBox
+        );
         return topBar;
     }
 
