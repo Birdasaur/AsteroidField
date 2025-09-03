@@ -7,6 +7,7 @@ import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import AsteroidField.tether.CameraKinematicAdapter;
 import AsteroidField.tether.Tether;
 import AsteroidField.tether.TetherSystem;
+import AsteroidField.tether.TetherTuningUI;
 import AsteroidField.util.AsteroidUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -382,11 +383,15 @@ public class AsteroidField3DView extends Pane {
         );
         return hbox;
     }
-
+    //Side Bar: Family Controls
     public VBox getDynamicFamilyBox() {
         VBox box = new VBox(10, new Label("Family Controls"), dynamicParamBox);
         box.setMinWidth(220);
         return box;
+    }
+    //Side Bar Tether Controls
+    public VBox getTetherTuningBox() {
+        return TetherTuningUI.build(tetherSystem);
     }
 
     /** Update family-specific parameter controls. */

@@ -24,6 +24,7 @@ public class App extends Application {
         root.setBottom(asteroidControls);
         VBox dynamicControls = fieldView.getDynamicFamilyBox();
         root.setRight(dynamicControls);
+        root.setLeft(fieldView.getTetherTuningBox());        
         Scene scene = new Scene(root, 1600, 800, true);
         scene.setFill(Color.BLACK);
         String CSS = StyleResourceProvider.getResource("styles.css").toExternalForm();

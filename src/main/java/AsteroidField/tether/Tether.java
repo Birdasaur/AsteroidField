@@ -48,6 +48,7 @@ public class Tether {
     private double dampingRatio = 0.9;    // ζ (1 = critical)
     private double maxForce = 900.0;      // clamp per tether
     private double slackEps = 0.02;
+    private double perpDampingRatio = 0.15; // 0.0–0.3 typical
 
     // State
     private final Supplier<List<Node>> collidablesSupplier;
@@ -86,16 +87,23 @@ public class Tether {
     }
 
     // --- config ---
-    public void setProjectileSpeed(double v){ this.projectileSpeed = v; }
-    public void setMaxRange(double v){ this.maxRange = v; }
-    public void setAabbInflation(double v){ this.aabbInflation = v; }
-    public void setReelRate(double v){ this.reelRate = v; }
-    public void setViewStartOffset(double v){ this.viewStartOffset = Math.max(0, v); }
+    public void setProjectileSpeed(double v){ projectileSpeed = v; }
+    public void setMaxRange(double v){ maxRange = v; }
+    public void setAabbInflation(double v){ aabbInflation = v; }
+    public void setReelRate(double v){ reelRate = v; }
+    public void setViewStartOffset(double v){ viewStartOffset = Math.max(0, v); }
 
-    public void setStiffness(double k){ this.stiffness = Math.max(0, k); }
-    public void setDampingRatio(double z){ this.dampingRatio = Math.max(0, z); }
-    public void setMaxForce(double f){ this.maxForce = Math.max(0, f); }
-    public void setSlackEps(double s){ this.slackEps = Math.max(0, s); }
+    public void setStiffness(double k){ stiffness = Math.max(0, k); }
+    public void setDampingRatio(double z){ dampingRatio = Math.max(0, z); }
+    public void setPerpDampingRatio(double r) { perpDampingRatio = Math.max(0, r); }
+    public void setMaxForce(double f){ maxForce = Math.max(0, f); }
+    public void setSlackEps(double s){ slackEps = Math.max(0, s); }
+    public double getStiffness()     { return stiffness; }
+    public double getDampingRatio()  { return dampingRatio; }
+    public double getPerpDampingRatio()  { return perpDampingRatio; }
+    public double getReelRate()      { return reelRate; }
+    public double getMaxForce()      { return maxForce; }
+    public double getSlackEps()      { return slackEps; }
 
     public void setDebugPersistOnMiss(boolean v){ this.debugPersistOnMiss = v; if (!v) persistActive = false; }
 
@@ -246,15 +254,20 @@ public class Tether {
         if (stretch > slackEps) {
             double m = Math.max(0.001, craft.getMass());
             double k = stiffness;
-            double c = 2.0 * dampingRatio * Math.sqrt(k * m); // near critical
+            double c = 2.0 * dampingRatio * Math.sqrt(k * m); // along-axis critical-ish
 
             double vAlong = craft.getVelocity().dotProduct(dir);
-
             double forceMag = (k * stretch) - (c * vAlong);
-            if (forceMag < 0) forceMag = 0;         // no pushing
+            if (forceMag < 0) forceMag = 0;
             if (forceMag > maxForce) forceMag = maxForce;
-
             craft.applyForce(dir.multiply(forceMag));
+
+            // --- NEW: small perpendicular damping ---
+            var v        = craft.getVelocity();
+            var vParallel= dir.multiply(vAlong);
+            var vPerp    = v.subtract(vParallel);
+            double cPerp = perpDampingRatio * 2.0 * Math.sqrt(k * m); // scaled to “feel right”
+            craft.applyForce(vPerp.multiply(-cPerp));
         }
     }
 }

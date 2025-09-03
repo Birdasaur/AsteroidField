@@ -80,11 +80,14 @@ public class TetherSystem {
         timer.start();
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        for (Tether t : tethers) t.setVisible(enabled);
-        if (enabled) { accumulator = 0; lastNs = -1; }
+public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
+    if (!enabled) {
+        releaseAll();                    // <— detach when turning off
     }
+    for (Tether t : tethers) t.setVisible(enabled);
+    if (enabled) { accumulator = 0; lastNs = -1; }
+}
 
     public boolean isEnabled() { return enabled; }
     public void releaseAll() { for (Tether t : tethers) t.release(); }
