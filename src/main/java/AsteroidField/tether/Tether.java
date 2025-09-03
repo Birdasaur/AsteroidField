@@ -40,6 +40,7 @@ public class Tether {
 
     // Runtime
     private TetherState state = TetherState.IDLE;
+    private Point3D emitterOffsetParent = Point3D.ZERO;  // start offset in parent/world space (sticks to the craft)
     private Point3D fireOrigin = Point3D.ZERO;
     private Point3D fireDir = new Point3D(0, 0, 1);
     private double tipDist = 0;
@@ -84,36 +85,43 @@ public class Tether {
     public boolean isStartMarkerVisible() { return view.isStartMarkerVisible(); }
     public boolean isEndMarkerVisible()   { return view.isEndMarkerVisible(); }
     
-    public void fireFrom(Point3D origin, Point3D dir) {
-        persistActive = false;
-        persistDir = null;
-        if (state == TetherState.FIRING || state == TetherState.ATTACHED) return;
+public void fireFrom(Point3D origin, Point3D dir) {
+    // Clear any persisted debug
+    persistActive = false;
+    persistDir = null;
 
-        this.fireOrigin = origin;
-        this.fireDir = dir.normalize();
-        this.prevTipDist = 0;
-        this.tipDist = 0;
-        this.restLength = 0;
-        this.attachedNode = null;
-        this.anchorLocal = null;
-        this.anchorWorld = null;
+    if (state == TetherState.FIRING || state == TetherState.ATTACHED) return;
 
-        state = TetherState.FIRING;
-        setVisible(true);
-    }
+    // Capture emitter offset relative to the craft so if the craft moves,
+    // the start stays under the "belly" or "wings"
+    Point3D craftPosNow = craft.getWorldPosition();
+    this.emitterOffsetParent = origin.subtract(craftPosNow);
 
-    public void release() {
-        state = TetherState.DETACHED;
-        attachedNode = null;
-        anchorLocal = null;
-        anchorWorld = null;
-        tipDist = 0;
-        prevTipDist = 0;
-        restLength = 0;
-        persistActive = false;
-        persistDir = null;
-        setVisible(false);
-    }
+    this.fireOrigin = origin;               // projectile math uses this fixed origin
+    this.fireDir = dir.normalize();
+    this.prevTipDist = 0;
+    this.tipDist = 0;
+    this.restLength = 0;
+    this.attachedNode = null;
+    this.anchorLocal = null;
+    this.anchorWorld = null;
+    state = TetherState.FIRING;
+    setVisible(true);
+}
+
+public void release() {
+    state = TetherState.DETACHED;
+    attachedNode = null;
+    anchorLocal = null;
+    anchorWorld = null;
+    tipDist = 0;
+    prevTipDist = 0;
+    restLength = 0;
+    emitterOffsetParent = Point3D.ZERO;  // clear
+    persistActive = false;
+    persistDir = null;
+    setVisible(false);
+}
 
     public void setPulling(boolean pulling) { this.pulling = pulling; }
 
@@ -135,88 +143,94 @@ public class Tether {
         }
     }
 
-    private void updateFiring(double dt) {
-        prevTipDist = tipDist;
-        tipDist += projectileSpeed * dt;
+private void updateFiring(double dt) {
+    prevTipDist = tipDist;
+    tipDist += projectileSpeed * dt;
 
-        if (tipDist > maxRange) {
-            if (debugPersistOnMiss) {
-                persistActive = true;
-                persistDir = fireDir;
-                state = TetherState.DETACHED; // keep drawing via persist path
-                return;
-            } else {
-                release();
-                return;
-            }
-        }
-
-        Point3D tipPrev = fireOrigin.add(fireDir.multiply(prevTipDist));
-        Point3D tipNow  = fireOrigin.add(fireDir.multiply(tipDist));
-
-        // Segment vs inflated AABB in parent/world space
-        List<Node> collidables = collidablesSupplier.get();
-        double bestT = Double.POSITIVE_INFINITY;
-        Node bestNode = null;
-        Point3D bestHit = null;
-
-        for (Node n : collidables) {
-            Bounds b = n.getBoundsInParent();
-            Bounds ib = Intersections.inflate(b, aabbInflation);
-            OptionalDouble hitT = Intersections.segmentAabbFirstHit(tipPrev, tipNow, ib);
-            if (hitT.isPresent()) {
-                double t = hitT.getAsDouble();
-                if (t < bestT) {
-                    bestT = t;
-                    bestNode = n;
-                    Point3D seg = tipNow.subtract(tipPrev);
-                    bestHit = tipPrev.add(seg.multiply(t));
-                }
-            }
-        }
-
-        Point3D craftPos = craft.getWorldPosition();
-        Point3D startBase = craftPos.add(fireDir.normalize().multiply(viewStartOffset));
-
-        if (bestNode != null) {
-            attachedNode = bestNode;
-            anchorLocal = attachedNode.parentToLocal(bestHit);
-            anchorWorld = bestHit;
-            restLength = craftPos.distance(bestHit);
-            state = TetherState.ATTACHED;
-            persistActive = false;
-            persistDir = null;
-            view.setStartAndEnd(startBase, bestHit);
+    if (tipDist > maxRange) {
+        if (debugPersistOnMiss) {
+            persistActive = true;
+            persistDir = fireDir;
+            state = TetherState.DETACHED;
+            return;
         } else {
-            view.setStartAndEnd(startBase, tipNow);
+            release();
+            return;
         }
     }
 
-    private void updateAttached(double dt) {
-        Point3D start = craft.getWorldPosition();
-        anchorWorld = (attachedNode != null)
-                ? attachedNode.localToParent(anchorLocal)
-                : anchorWorld;
+    Point3D tipPrev = fireOrigin.add(fireDir.multiply(prevTipDist));
+    Point3D tipNow  = fireOrigin.add(fireDir.multiply(tipDist));
 
-        if (anchorWorld == null) { release(); return; }
-
-        Point3D toAnchor = anchorWorld.subtract(start);
-        double dist = toAnchor.magnitude();
-        if (dist < 1e-6) return;
-
-        Point3D dir = toAnchor.normalize();
-        Point3D startBase = start.add(dir.multiply(viewStartOffset));
-        view.setStartAndEnd(startBase, anchorWorld);
-
-        if (pulling) {
-            restLength = Math.max(0.0, restLength - reelRate * dt);
-        }
-
-        if (dist > restLength) {
-            double stretch = dist - restLength;
-            double k = pullAccel;
-            Point3D accel = dir.multiply(k * (stretch / Math.max(dist, 1e-6)));
-            craft.applyPull(accel, dt);
+    // Collision …
+    List<Node> collidables = collidablesSupplier.get();
+    double bestT = Double.POSITIVE_INFINITY;
+    Node bestNode = null;
+    Point3D bestHit = null;
+    for (Node n : collidables) {
+        Bounds b = n.getBoundsInParent();
+        Bounds ib = Intersections.inflate(b, aabbInflation);
+        OptionalDouble hitT = Intersections.segmentAabbFirstHit(tipPrev, tipNow, ib);
+        if (hitT.isPresent()) {
+            double t = hitT.getAsDouble();
+            if (t < bestT) {
+                bestT = t;
+                bestNode = n;
+                Point3D seg = tipNow.subtract(tipPrev);
+                bestHit = tipPrev.add(seg.multiply(t));
+            }
         }
     }
+
+    // Start = craft position + emitter offset (parent/world space)
+    Point3D craftPos = craft.getWorldPosition();
+    Point3D start    = craftPos.add(emitterOffsetParent);
+    Point3D startBase = start.add(fireDir.normalize().multiply(viewStartOffset));
+
+    if (bestNode != null) {
+        attachedNode = bestNode;
+        anchorLocal = attachedNode.parentToLocal(bestHit);
+        anchorWorld = bestHit;
+        restLength = start.distance(bestHit);   // use the true start
+        state = TetherState.ATTACHED;
+        persistActive = false;
+        persistDir = null;
+        view.setStartAndEnd(startBase, bestHit);
+    } else {
+        view.setStartAndEnd(startBase, tipNow);
+    }
+}
+
+private void updateAttached(double dt) {
+    // Start = craft position + emitter offset
+    Point3D craftPos = craft.getWorldPosition();
+    Point3D start    = craftPos.add(emitterOffsetParent);
+
+    anchorWorld = (attachedNode != null)
+            ? attachedNode.localToParent(anchorLocal)
+            : anchorWorld;
+
+    if (anchorWorld == null) { release(); return; }
+
+    Point3D toAnchor = anchorWorld.subtract(start);
+    double dist = toAnchor.magnitude();
+    if (dist < 1e-6) return;
+
+    Point3D dir = toAnchor.normalize();
+    Point3D startBase = start.add(dir.multiply(viewStartOffset));
+
+    // Visual
+    view.setStartAndEnd(startBase, anchorWorld);
+
+    // Reel
+    if (pulling) restLength = Math.max(0.0, restLength - reelRate * dt);
+
+    if (dist > restLength) {
+        double stretch = dist - restLength;
+        double k = pullAccel;
+        Point3D accel = dir.multiply(k * (stretch / Math.max(dist, 1e-6)));
+        craft.applyPull(accel, dt);
+    }
+}
+
 }

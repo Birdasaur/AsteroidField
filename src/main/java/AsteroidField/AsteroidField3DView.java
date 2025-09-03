@@ -137,20 +137,20 @@ public class AsteroidField3DView extends Pane {
         tetherSystem.getTether(1).setShowEndMarker(true);
         tetherSystem.getTether(0).setDebugPersistOnMiss(true);
         tetherSystem.getTether(1).setDebugPersistOnMiss(true);
-        tetherSystem.setSymmetricWingOffsets(20, -150, 5);
+        tetherSystem.setSymmetricWingOffsets(20, 50, 5);
 //        tetherSystem.setEmitterOffsetsLocal(
 //            new Point3D(0, -15, 8),  // tether 0
 //            new Point3D(0, -15, 8)   // tether 1
 //        );        
 
-//        flyController = new FlyCameraController(camera, subScene);
-//        flyController.setSpeed(150);
-//        flyController.setBoostMultiplier(3);
-//        flyController.setSensitivity(0.2);
-//        flyController.setEnabled(false);
-//
-//        trackballController = new TrackBallController(subScene, camera, asteroidViews);
-//        trackballController.setEnabled(false);
+        flyController = new FlyCameraController(camera, subScene);
+        flyController.setSpeed(150);
+        flyController.setBoostMultiplier(3);
+        flyController.setSensitivity(0.2);
+        flyController.setEnabled(false);
+
+        trackballController = new TrackBallController(subScene, camera, asteroidViews);
+        trackballController.setEnabled(false);
 
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
