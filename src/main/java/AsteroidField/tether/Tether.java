@@ -31,7 +31,7 @@ public class Tether {
     private double aabbInflation = 1.2;     // margin around collidables
     private double reelRate = 200;          // units/s when pulling
     private double pullAccel = 60;          // baseline accel when taut
-    private double tetherRadius = 15.0;      // BIG for visibility with Cylinder
+    private double tetherRadius = 1.0;      // BIG for visibility with Cylinder
     private double viewStartOffset = 1.0;   // push base forward to avoid near-plane clipping
 
     private boolean debugPersistOnMiss = true;
@@ -63,7 +63,7 @@ public class Tether {
 
         // Use our Cylinder-based view; color controls the beam color
         this.view = new TetherView(0, (float) tetherRadius, color);
-        this.view.setShowMarkers(true); // show big start/end spheres (debug)
+//        this.view.setShowMarkers(true); // show big start/end spheres (debug)
         parent3D.getChildren().add(view);
         setVisible(false);
     }
@@ -76,7 +76,14 @@ public class Tether {
     public TetherState getState(){ return state; }
     public boolean isAttached(){ return state == TetherState.ATTACHED; }
     public void setVisible(boolean v){ view.setVisibleAndPickOnBounds(v); }
-
+    public void setShowStartMarker(boolean show) { view.setShowStartMarker(show); }
+    public void setShowEndMarker(boolean show)   { view.setShowEndMarker(show); }
+    public void setMarkerVisibility(boolean showStart, boolean showEnd) {
+        view.setMarkerVisibility(showStart, showEnd);
+    }
+    public boolean isStartMarkerVisible() { return view.isStartMarkerVisible(); }
+    public boolean isEndMarkerVisible()   { return view.isEndMarkerVisible(); }
+    
     public void fireFrom(Point3D origin, Point3D dir) {
         persistActive = false;
         persistDir = null;

@@ -8,57 +8,51 @@ import javafx.scene.shape.CullFace;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.shape.DrawMode;
 import javafx.scene.shape.Sphere;
-import javafx.scene.transform.Rotate;
-import javafx.scene.transform.Scale;
-import javafx.scene.transform.Translate;
+import javafx.scene.transform.Affine;
 
 /**
- * Visual tether using a Cylinder. The Cylinder is normally centered at local Y=0,
- * so we add a PRE-TRANSLATE of +0.5 in local Y before scaling to make its BASE at y=0.
- * Order: [localBase] -> [scaleY=len] -> [rotate] -> [worldTranslate=start].
+ * Tether view that uses a single Affine to orient the cylinder.
+ * - Cylinder is centered at its local origin, height runs along local +Y from -h/2..+h/2
+ * - We set height = |end-start|
+ * - Build an orthonormal basis where local Y maps to (end-start).normalize()
+ * - Place the cylinder center at the midpoint
+ *
+ * Now supports independent visibility toggles for start/end markers.
  */
 public class TetherView extends Group {
 
-    // Main beam
     private final Cylinder beam;
-    private final Translate localBase;   // shifts center up by +0.5 so base is at 0
-    private final Scale scale;           // scales height 1 -> len
-    private final Rotate rotate;         // orients +Y -> direction
-    private final Translate worldTranslate; // moves base to start
+    private final Affine   xform;
 
     // Debug markers
     private final Sphere startMarker;
     private final Sphere endMarker;
 
-    private boolean showMarkers = true;   // turn on for debugging
+    // Independent toggles. Default to off since these are mostly for debug
+    private boolean showStartMarker = false;
+    private boolean showEndMarker   = false;
 
     public TetherView(int radialDivisionsIgnored, float radius, Color color) {
-        // Cylinder of height=1 oriented along +Y
-        beam = new Cylinder(radius, 100.0);
-        beam.setCullFace(CullFace.NONE);
-        beam.setDrawMode(DrawMode.LINE);       // FILL for maximum visibility
+        beam = new Cylinder(radius, 1.0);
         beam.setMaterial(new PhongMaterial(color));
-        beam.setMouseTransparent(true);        // never block picking
+        beam.setCullFace(CullFace.NONE);
+        beam.setDrawMode(DrawMode.FILL);      // Use FILL for max visibility (change to LINE if you prefer)
+        beam.setMouseTransparent(true);       // never block picking
 
-        // Transforms: note the order they are ADDED is the order applied
-        localBase = new Translate(0, +0.5, 0); // base at y=0 after this
-        scale = new Scale(1, 0.0001, 1);       // set Y to 'len' in setStartAndEnd
-        rotate = new Rotate(0, new Point3D(0, 0, 1));
-        worldTranslate = new Translate(0, 0, 0);
+        xform = new Affine();
+        beam.getTransforms().add(xform);
 
-        beam.getTransforms().addAll(localBase, scale, rotate, worldTranslate);
-
-        // Debug markers
+        // Debug markers (mouseTransparent so they don't block ray casts)
         startMarker = new Sphere(radius * 1.8);
         startMarker.setMaterial(new PhongMaterial(Color.LIMEGREEN));
         startMarker.setCullFace(CullFace.NONE);
-        startMarker.setDrawMode(DrawMode.LINE);
+        startMarker.setDrawMode(DrawMode.FILL);
         startMarker.setMouseTransparent(true);
 
         endMarker = new Sphere(radius * 2.2);
         endMarker.setMaterial(new PhongMaterial(Color.RED));
         endMarker.setCullFace(CullFace.NONE);
-        endMarker.setDrawMode(DrawMode.LINE);
+        endMarker.setDrawMode(DrawMode.FILL);
         endMarker.setMouseTransparent(true);
 
         getChildren().addAll(beam, startMarker, endMarker);
@@ -66,14 +60,26 @@ public class TetherView extends Group {
         updateMarkerVisibility();
     }
 
-    public void setShowMarkers(boolean show) {
-        this.showMarkers = show;
+    // --- Independent marker controls ---
+    public void setShowStartMarker(boolean show) {
+        this.showStartMarker = show;
         updateMarkerVisibility();
     }
+    public void setShowEndMarker(boolean show) {
+        this.showEndMarker = show;
+        updateMarkerVisibility();
+    }
+    public void setMarkerVisibility(boolean showStart, boolean showEnd) {
+        this.showStartMarker = showStart;
+        this.showEndMarker   = showEnd;
+        updateMarkerVisibility();
+    }
+    public boolean isStartMarkerVisible() { return showStartMarker; }
+    public boolean isEndMarkerVisible()   { return showEndMarker; }
 
     private void updateMarkerVisibility() {
-        startMarker.setVisible(showMarkers);
-        endMarker.setVisible(showMarkers);
+        startMarker.setVisible(showStartMarker);
+        endMarker.setVisible(showEndMarker);
     }
 
     public void setVisibleAndPickOnBounds(boolean visible) {
@@ -91,36 +97,32 @@ public class TetherView extends Group {
         endMarker.setTranslateY(end.getY());
         endMarker.setTranslateZ(end.getZ());
 
-        // Beam
+        // Segment math
         Point3D dir = end.subtract(start);
         double len = dir.magnitude();
         if (len < 1e-6) len = 1e-6;
-        Point3D ndir = dir.normalize();
+        Point3D v   = dir.normalize();         // target for local +Y
+        Point3D mid = start.midpoint(end);     // cylinder center in world
 
-        // Scale Y to length (base stays at y=0 because of localBase)
-        scale.setX(1);
-        scale.setY(len);
-        scale.setZ(1);
-
-        // Rotate from +Y to target direction
-        Point3D yAxis = new Point3D(0, 1, 0);
-        double dot = clamp(yAxis.dotProduct(ndir), -1, 1);
-        double angleDeg = Math.toDegrees(Math.acos(dot));
-        Point3D rotAxis = yAxis.crossProduct(ndir);
-        if (rotAxis.magnitude() < 1e-6) {
-            rotAxis = new Point3D(1, 0, 0);
-            angleDeg = (dot > 0) ? 0 : 180;
+        // Build an orthonormal frame: right (X), up (Z), v (Y)
+        Point3D refUp = (Math.abs(v.getY()) < 0.99) ? new Point3D(0, 1, 0) : new Point3D(1, 0, 0);
+        Point3D right = v.crossProduct(refUp);
+        double rmag = right.magnitude();
+        if (rmag < 1e-6) {
+            refUp = new Point3D(0, 0, 1);
+            right = v.crossProduct(refUp);
+            rmag = right.magnitude();
+            if (rmag < 1e-6) right = new Point3D(1, 0, 0);
         }
-        rotate.setAxis(rotAxis);
-        rotate.setAngle(angleDeg);
+        right = right.normalize();
+        Point3D up = right.crossProduct(v).normalize();
 
-        // Move base to start
-        worldTranslate.setX(start.getX());
-        worldTranslate.setY(start.getY());
-        worldTranslate.setZ(start.getZ());
-    }
+        // Set cylinder length (centered at origin in its local space)
+        beam.setHeight(len);
 
-    private static double clamp(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
+        // Affine from basis vectors (columns) and translation (midpoint)
+        xform.setMxx(right.getX()); xform.setMxy(v.getX()); xform.setMxz(up.getX()); xform.setTx(mid.getX());
+        xform.setMyx(right.getY()); xform.setMyy(v.getY()); xform.setMyz(up.getY()); xform.setTy(mid.getY());
+        xform.setMzx(right.getZ()); xform.setMzy(v.getZ()); xform.setMzz(up.getZ()); xform.setTz(mid.getZ());
     }
 }

@@ -38,6 +38,7 @@ import javafx.scene.shape.CullFace;
 // --- Tether imports ---
 import AsteroidField.tether.CameraKinematicAdapter;
 import AsteroidField.tether.TetherSystem;
+import javafx.geometry.Point3D;
 
 public class AsteroidField3DView extends Pane {
 
@@ -132,8 +133,15 @@ public class AsteroidField3DView extends Pane {
                 cameraCraft
         );
         tetherSystem.setEnabled(false); // off by default; controlled by top-bar toggle
+        tetherSystem.getTether(0).setShowEndMarker(true);
+        tetherSystem.getTether(1).setShowEndMarker(true);
         tetherSystem.getTether(0).setDebugPersistOnMiss(true);
         tetherSystem.getTether(1).setDebugPersistOnMiss(true);
+        tetherSystem.setSymmetricWingOffsets(20, -150, 5);
+//        tetherSystem.setEmitterOffsetsLocal(
+//            new Point3D(0, -15, 8),  // tether 0
+//            new Point3D(0, -15, 8)   // tether 1
+//        );        
 
 //        flyController = new FlyCameraController(camera, subScene);
 //        flyController.setSpeed(150);
