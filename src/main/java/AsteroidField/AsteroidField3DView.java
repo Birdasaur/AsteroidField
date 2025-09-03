@@ -8,6 +8,7 @@ import AsteroidField.tether.CameraKinematicAdapter;
 import AsteroidField.tether.Tether;
 import AsteroidField.tether.TetherSystem;
 import AsteroidField.tether.TetherTuningUI;
+import AsteroidField.tether.ThrusterController;
 import AsteroidField.util.AsteroidUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,7 +74,7 @@ public class AsteroidField3DView extends Pane {
     private ToggleButton cameraModeToggle;
     private Button resetCameraBtn;
     private ComboBox<String> asteroidSelectorBox;
-    private FlyCameraController flyController;
+    private ThrusterController thrusterController;
     private TrackBallController trackballController;
 
     // Tether system
@@ -150,7 +151,6 @@ public class AsteroidField3DView extends Pane {
                 cameraCraft
         );
         tetherSystem.setEnabled(false);
-
         // Per-tether feel
         for (int i = 0; i < 2; i++) {
             Tether t = tetherSystem.getTether(i);
@@ -165,15 +165,18 @@ public class AsteroidField3DView extends Pane {
             }
         }
         tetherSystem.setSymmetricWingOffsets(20, 50, 5);
-
-        flyController = new FlyCameraController(camera, subScene);
-        flyController.setSpeed(150);
-        flyController.setBoostMultiplier(3);
-        flyController.setSensitivity(0.2);
-        flyController.setEnabled(false);
+        // Micro-thrusters + free-look, running in the same fixed-step as tethers
+        thrusterController = new AsteroidField.tether.ThrusterController(subScene, camera, cameraCraft);
+        tetherSystem.addContributor(thrusterController);
+        // (Optional) tweak thrust feel)
+        thrusterController.setThrustPower(480);
+        thrusterController.setVerticalPower(360);
+        thrusterController.setBrakePower(1400);
+        thrusterController.setDampenerPower(220);
+        thrusterController.setLookSensitivity(0.18);        
 
         trackballController = new TrackBallController(subScene, camera, asteroidViews);
-        trackballController.setEnabled(false);
+        trackballController.setEnabled(true);
 
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
@@ -229,12 +232,12 @@ public class AsteroidField3DView extends Pane {
         cameraModeToggle.setOnAction(e -> {
             boolean trackballMode = cameraModeToggle.isSelected();
             if (trackballMode) {
-                flyController.setEnabled(false);
+                thrusterController.setEnabled(false);
                 trackballController.setEnabled(true);
                 trackballController.setSelected(selectedAsteroid);
             } else {
                 trackballController.setEnabled(false);
-                flyController.setEnabled(true);
+                thrusterController.setEnabled(true);
             }
         });
 

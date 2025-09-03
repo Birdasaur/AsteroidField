@@ -13,6 +13,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.transform.Affine;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -33,7 +34,11 @@ public class TetherSystem {
             Point3D.ZERO, Point3D.ZERO
     };
 
-    // Fixed-step physics (substep in timer)
+    // External physics contributors (thrusters, autopilots, etc.)
+    private final List<PhysicsContributor> contributors = new ArrayList<>();
+    public void addContributor(PhysicsContributor c) { if (c != null) contributors.add(c); }
+
+    // Fixed-step physics
     private final double fixedDt = 1.0 / 120.0; // 120 Hz
     private final double maxAccumulator = 0.25;
     private double accumulator = 0;
@@ -41,15 +46,23 @@ public class TetherSystem {
 
     private final AnimationTimer timer = new AnimationTimer() {
         @Override public void handle(long now) {
-            if (!enabled) { lastNs = now; return; }
+            // Always run the loop so contributors (e.g., thrusters) work even when tethers are disabled
             if (lastNs < 0) { lastNs = now; return; }
-            double dt = (now - lastNs) / 1_000_000_000.0;
+            double dt = (now - lastNs) * 1e-9;
             lastNs = now;
 
             accumulator = Math.min(accumulator + dt, maxAccumulator);
             while (accumulator >= fixedDt) {
-                for (Tether t : tethers) t.update(fixedDt);
+                // Update tethers only if enabled
+                if (enabled) {
+                    for (Tether t : tethers) t.update(fixedDt);
+                }
+                // Contributors always step (thrusters, etc.)
+                for (PhysicsContributor c : contributors) c.step(fixedDt);
+
+                // Integrate craft motion
                 if (hasKinematic) ((KinematicCraft) craft).tick(fixedDt);
+
                 accumulator -= fixedDt;
             }
         }
@@ -68,8 +81,6 @@ public class TetherSystem {
                 new Tether(0, worldRoot3D, collidablesSupplier, craft, Color.CYAN),
                 new Tether(1, worldRoot3D, collidablesSupplier, craft, Color.ORANGE)
         };
-
-        // Small forward clearance from camera to avoid near-plane clipping
         for (Tether t : tethers) t.setViewStartOffset(0.5);
 
         this.hasKinematic = (craft instanceof KinematicCraft);
@@ -80,39 +91,36 @@ public class TetherSystem {
         timer.start();
     }
 
-public void setEnabled(boolean enabled) {
-    this.enabled = enabled;
-    if (!enabled) {
-        releaseAll();                    // <— detach when turning off
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        if (!enabled) {
+            releaseAll(); // detach when turning off; visuals hide below
+        }
+        for (Tether t : tethers) t.setVisible(enabled);
+        // Keep timer running; just resync timing so physics stepping stays smooth
+        accumulator = 0;
+        lastNs = -1;
     }
-    for (Tether t : tethers) t.setVisible(enabled);
-    if (enabled) { accumulator = 0; lastNs = -1; }
-}
 
     public boolean isEnabled() { return enabled; }
     public void releaseAll() { for (Tether t : tethers) t.release(); }
+    public Tether getTether(int i) { return (i>=0 && i<tethers.length) ? tethers[i] : null; }
 
     // Debug marker helper
     public void setMarkerVisibilityAll(boolean showStart, boolean showEnd) {
         for (Tether t : tethers) { t.setShowStartMarker(showStart); t.setShowEndMarker(showEnd); }
     }
 
-    public Tether getTether(int i) { return (i>=0 && i<tethers.length) ? tethers[i] : null; }
-
     /** Local offset for one tether (camera/craft local axes: +X=right, +Y=up, +Z=forward). */
     public void setEmitterOffsetLocal(int idx, Point3D localOffset) {
         if (idx < 0 || idx >= emitterOffsetLocal.length) return;
         emitterOffsetLocal[idx] = (localOffset != null) ? localOffset : Point3D.ZERO;
     }
-
-    /** Convenience: set both offsets. */
     public void setEmitterOffsetsLocal(Point3D... offsets) {
         if (offsets == null) return;
         if (offsets.length >= 1) setEmitterOffsetLocal(0, offsets[0]);
         if (offsets.length >= 2) setEmitterOffsetLocal(1, offsets[1]);
     }
-
-    /** Symmetric wing emitters: +/-X with common Y,Z. */
     public void setSymmetricWingOffsets(double lateralX, double localY, double localZ) {
         setEmitterOffsetsLocal(
                 new Point3D(-Math.abs(lateralX), localY, localZ),
@@ -122,24 +130,20 @@ public void setEnabled(boolean enabled) {
 
     private void installInputHandlers() {
         subScene.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
-            if (!enabled) return;
+            if (!enabled) return; // firing tethers only when enabled
             if (e.getButton() == MouseButton.PRIMARY) fireTether(0, e);
             else if (e.getButton() == MouseButton.SECONDARY) fireTether(1, e);
         });
 
         subScene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-            if (!enabled) return;
-            if (e.getCode() == KeyCode.SHIFT) {
-                for (Tether t : tethers) t.setPulling(true);
-            }
+            if (!enabled) return; // pulling/release only when enabled
+            if (e.getCode() == KeyCode.SHIFT)   { for (Tether t : tethers) t.setPulling(true); }
             if (e.getCode() == KeyCode.CONTROL) { releaseAll(); }
         });
 
         subScene.addEventFilter(KeyEvent.KEY_RELEASED, e -> {
             if (!enabled) return;
-            if (e.getCode() == KeyCode.SHIFT) {
-                for (Tether t : tethers) t.setPulling(false);
-            }
+            if (e.getCode() == KeyCode.SHIFT)   { for (Tether t : tethers) t.setPulling(false); }
         });
     }
 
@@ -147,19 +151,17 @@ public void setEnabled(boolean enabled) {
     private void fireTether(int idx, MouseEvent e) {
         if (idx < 0 || idx >= tethers.length) return;
 
-        // 1) Ray in SCENE space
         var rayScene = RayUtil.computePickRay(camera, subScene, e.getX(), e.getY());
 
-        // 2) Convert ray to parent/world space
         Point3D originParent = worldRoot3D.sceneToLocal(rayScene.origin);
         Point3D p1Parent     = worldRoot3D.sceneToLocal(rayScene.origin.add(rayScene.dir));
-        Point3D dirParent    = p1Parent.subtract(originParent).normalize();
+        Point3D dirParent    = p1Parent.subtract(originParent);
+        if (dirParent.magnitude() < 1e-9) return;
+        dirParent = dirParent.normalize();
 
-        // 3) Start = craft position + emitter local offset (converted)
-        Point3D base = craft.getWorldPosition();
+        Point3D base  = craft.getWorldPosition();
         Point3D start = base.add(localOffsetToParent(emitterOffsetLocal[idx]));
 
-        // 4) Fire
         tethers[idx].fireFrom(start, dirParent);
     }
 
