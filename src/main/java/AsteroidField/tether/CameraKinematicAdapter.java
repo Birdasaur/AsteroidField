@@ -7,23 +7,23 @@ import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
 
 /**
- * Wraps the PerspectiveCamera in a "rig" Group that we move in world space.
- * Applies simple kinematic integration (velocity + damping) to enable
- * tether-driven motion without a full spacecraft controller.
- *
- * IMPORTANT: getWorldPosition() returns the camera's true world position converted
- * into the world-root (parent) space so the tether start matches what you see.
+ * Kinematic point-mass adapter around the camera.
+ * Accumulates forces and integrates velocity/position each fixed step.
  */
-public class CameraKinematicAdapter implements KinematicCraft {
+public class CameraKinematicAdapter implements KinematicCraft, Tether.SpacecraftAdapter {
 
     private final PerspectiveCamera camera;
-    private final Group rig;       // parent of the camera; we move this via pulls
-    private final Group worldRoot; // the 3D root (parent space the tether uses)
-    private Point3D velocity = Point3D.ZERO;
+    private final Group rig;        // moved by physics
+    private final Group worldRoot;  // parent/world space
 
-    // Tuning knobs
-    private double linearDampingPerSecond = 0.20;  // fraction of speed lost per second
-    private double maxSpeed = 450;                 // units/s
+    // Physics state
+    private double mass = 1.0;
+    private Point3D velocity = Point3D.ZERO;   // parent/world space
+    private Point3D forceAccum = Point3D.ZERO;
+
+    // Tuning
+    private double linearDampingPerSecond = 0.15; // fraction/sec
+    private double maxSpeed = 550;
 
     private CameraKinematicAdapter(PerspectiveCamera camera, Group rig, Group worldRoot) {
         this.camera = camera;
@@ -31,26 +31,18 @@ public class CameraKinematicAdapter implements KinematicCraft {
         this.worldRoot = worldRoot;
     }
 
-    /**
-     * Attach the subscene's camera into a rig that's parented by worldRoot.
-     * Preserves the camera's current local transforms by moving them onto the rig,
-     * then zeroes the camera's local transforms so the rig exclusively controls position.
-     */
+    /** Wrap camera in a rig under worldRoot and return the adapter. */
     public static CameraKinematicAdapter attach(SubScene subScene, Group worldRoot) {
         PerspectiveCamera cam = (PerspectiveCamera) subScene.getCamera();
         if (cam == null) {
             cam = new PerspectiveCamera(true);
             subScene.setCamera(cam);
         }
-
-        // Remove from previous parent if present
         Parent prev = cam.getParent();
         if (prev instanceof Group g) g.getChildren().remove(cam);
 
-        // Create rig and absorb camera's transforms
         Group rig = new Group();
-
-        // Copy convenience transforms
+        // absorb camera's current transforms onto the rig
         rig.setTranslateX(cam.getTranslateX());
         rig.setTranslateY(cam.getTranslateY());
         rig.setTranslateZ(cam.getTranslateZ());
@@ -59,71 +51,68 @@ public class CameraKinematicAdapter implements KinematicCraft {
         rig.setScaleZ(cam.getScaleZ());
         rig.setRotationAxis(cam.getRotationAxis());
         rig.setRotate(cam.getRotate());
-
-        // Copy any custom transforms
         rig.getTransforms().setAll(cam.getTransforms());
 
-        // Reset camera local transforms to identity
+        // reset camera locals
         cam.getTransforms().clear();
         cam.setTranslateX(0); cam.setTranslateY(0); cam.setTranslateZ(0);
         cam.setScaleX(1); cam.setScaleY(1); cam.setScaleZ(1);
-        cam.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0,1,0)); // default axis
+        cam.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0,1,0));
         cam.setRotate(0);
 
-        // Parent camera under rig; rig under world
         rig.getChildren().add(cam);
-        if (!worldRoot.getChildren().contains(rig)) {
-            worldRoot.getChildren().add(rig);
-        }
+        if (!worldRoot.getChildren().contains(rig)) worldRoot.getChildren().add(rig);
         return new CameraKinematicAdapter(cam, rig, worldRoot);
     }
 
-    /** Set initial world position (and leave velocity as-is). */
-    public void setPosition(double x, double y, double z) {
-        rig.setTranslateX(x);
-        rig.setTranslateY(y);
-        rig.setTranslateZ(z);
-    }
-
-    /** Reset position and zero velocity. */
-    public void resetPosition(double x, double y, double z) {
-        setPosition(x, y, z);
-        velocity = Point3D.ZERO;
-    }
-
+    // --- Controls / tuning ---
+    public void setMass(double m) { this.mass = Math.max(0.001, m); }
+    public double getMass() { return mass; }
     public void setMaxSpeed(double v) { this.maxSpeed = Math.max(1, v); }
     public void setLinearDampingPerSecond(double v) { this.linearDampingPerSecond = Math.max(0, Math.min(0.99, v)); }
 
-    // ---- Tether.SpacecraftAdapter ----
-    @Override
-    public Point3D getWorldPosition() {
-        // Return camera position in *worldRoot (parent)* coordinates.
-        // This accounts for camera-local transforms (from your controllers) + rig transforms.
-        Point3D cameraInScene = camera.localToScene(Point3D.ZERO);
-        return worldRoot.sceneToLocal(cameraInScene);
+    public void setPosition(double x, double y, double z) {
+        rig.setTranslateX(x); rig.setTranslateY(y); rig.setTranslateZ(z);
     }
 
-    @Override
-    public void applyPull(Point3D acceleration, double dt) {
-        // v = v + a*dt
-        velocity = velocity.add(acceleration.multiply(dt));
-        // Clamp speed
+    public void resetPosition(double x, double y, double z) {
+        setPosition(x, y, z);
+        velocity = Point3D.ZERO;
+        forceAccum = Point3D.ZERO;
+    }
+
+    // --- SpacecraftAdapter ---
+    @Override public Point3D getWorldPosition() {
+        // Convert camera local origin to worldRoot parent space
+        Point3D camScene = camera.localToScene(Point3D.ZERO);
+        return worldRoot.sceneToLocal(camScene);
+    }
+
+    @Override public Point3D getVelocity() { return velocity; }
+
+    @Override public void applyForce(Point3D force) {
+        if (force != null) forceAccum = forceAccum.add(force);
+    }
+
+    // --- Physics integration (fixed dt) ---
+    @Override public void tick(double dt) {
+        Point3D accel = (mass > 0) ? forceAccum.multiply(1.0 / mass) : Point3D.ZERO;
+        velocity = velocity.add(accel.multiply(dt));
+
+        // global damping
+        double keep = Math.pow(1.0 - linearDampingPerSecond, dt);
+        velocity = new Point3D(velocity.getX() * keep, velocity.getY() * keep, velocity.getZ() * keep);
+
+        // speed clamp
         double speed = velocity.magnitude();
-        if (speed > maxSpeed) {
-            velocity = velocity.normalize().multiply(maxSpeed);
-        }
-    }
+        if (speed > maxSpeed) velocity = velocity.normalize().multiply(maxSpeed);
 
-    // ---- KinematicCraft ----
-    @Override
-    public void tick(double dt) {
-        // Integrate position: p = p + v*dt
+        // integrate position
         rig.setTranslateX(rig.getTranslateX() + velocity.getX() * dt);
         rig.setTranslateY(rig.getTranslateY() + velocity.getY() * dt);
         rig.setTranslateZ(rig.getTranslateZ() + velocity.getZ() * dt);
 
-        // Exponential damping
-        double keep = Math.pow(1.0 - linearDampingPerSecond, dt);
-        velocity = new Point3D(velocity.getX() * keep, velocity.getY() * keep, velocity.getZ() * keep);
+        // clear forces
+        forceAccum = Point3D.ZERO;
     }
 }

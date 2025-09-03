@@ -11,49 +11,67 @@ import java.util.OptionalDouble;
 import java.util.function.Supplier;
 
 /**
- * Tether logic in parent/world-root space.
- * Adds "persist-on-miss" and uses a large Cylinder-based view with debug markers.
+ * Force-based tether with spring-damper mechanics and smooth reeling.
+ * Uses parent/world-root coordinates throughout.
  */
 public class Tether {
 
     public interface SpacecraftAdapter {
         Point3D getWorldPosition();
-        void applyPull(Point3D acceleration, double dtSeconds);
+        Point3D getVelocity();
+        double getMass();
+        void applyForce(Point3D force);
+
+        // Compatibility with older usage if needed:
+        default void applyPull(Point3D acceleration, double dtSeconds) {
+            applyForce(acceleration.multiply(getMass()));
+        }
     }
 
     private final int id;
     private final Group parent3D;
     private final TetherView view;
 
-    // Config (tuned for visibility)
-    private double projectileSpeed = 250;   // units/s
-    private double maxRange = 4000;         // units
-    private double aabbInflation = 1.2;     // margin around collidables
-    private double reelRate = 200;          // units/s when pulling
-    private double pullAccel = 60;          // baseline accel when taut
-    private double tetherRadius = 1.0;      // BIG for visibility with Cylinder
-    private double viewStartOffset = 1.0;   // push base forward to avoid near-plane clipping
+    // Projectile/firing
+    private double projectileSpeed = 250;
+    private double maxRange = 4000;
+    private double aabbInflation = 1.2;
 
-    private boolean debugPersistOnMiss = true;
-    private boolean persistActive = false;
-    private Point3D persistDir = null;      // normalized, in parent/world space
+    // Rope mechanics
+    private double reelRate = 200;        // units/s
+    private double restLength = 0;
+    private final double minRestLength = 2.0;
+    private double viewStartOffset = 0.5; // visual nudge along direction
 
-    // Runtime
+    // Spring-damper params
+    private double stiffness = 160.0;     // k (N/m)
+    private double dampingRatio = 0.9;    // ζ (1 = critical)
+    private double maxForce = 900.0;      // clamp per tether
+    private double slackEps = 0.02;
+
+    // State
+    private final Supplier<List<Node>> collidablesSupplier;
+    private final SpacecraftAdapter craft;
     private TetherState state = TetherState.IDLE;
-    private Point3D emitterOffsetParent = Point3D.ZERO;  // start offset in parent/world space (sticks to the craft)
+    private boolean pulling = false;
+
+    // Firing state
     private Point3D fireOrigin = Point3D.ZERO;
     private Point3D fireDir = new Point3D(0, 0, 1);
-    private double tipDist = 0;
-    private double prevTipDist = 0;
-    private double restLength = 0;
+    private double tipDist = 0, prevTipDist = 0;
 
+    // Anchor
     private Node attachedNode = null;
     private Point3D anchorLocal = null;
     private Point3D anchorWorld = null;
 
-    private final Supplier<List<Node>> collidablesSupplier;
-    private final SpacecraftAdapter craft;
-    private boolean pulling = false;
+    // Where rope leaves the craft (parent/world space), sticks to “belly/wings”
+    private Point3D emitterOffsetParent = Point3D.ZERO;
+
+    // Debug
+    private boolean debugPersistOnMiss = false;
+    private boolean persistActive = false;
+    private Point3D persistDir = null;
 
     public Tether(int id, Group parent3D, Supplier<List<Node>> collidablesSupplier,
                   SpacecraftAdapter craft, Color color) {
@@ -62,175 +80,181 @@ public class Tether {
         this.collidablesSupplier = collidablesSupplier;
         this.craft = craft;
 
-        // Use our Cylinder-based view; color controls the beam color
-        this.view = new TetherView(0, (float) tetherRadius, color);
-//        this.view.setShowMarkers(true); // show big start/end spheres (debug)
+        this.view = new TetherView(0, /*radius placeholder*/ 3.0f, color);
         parent3D.getChildren().add(view);
         setVisible(false);
     }
 
-    // Exposed toggles
-    public void setDebugPersistOnMiss(boolean v){
-        this.debugPersistOnMiss = v;
-        if (!v) persistActive = false;
-    }
+    // --- config ---
+    public void setProjectileSpeed(double v){ this.projectileSpeed = v; }
+    public void setMaxRange(double v){ this.maxRange = v; }
+    public void setAabbInflation(double v){ this.aabbInflation = v; }
+    public void setReelRate(double v){ this.reelRate = v; }
+    public void setViewStartOffset(double v){ this.viewStartOffset = Math.max(0, v); }
+
+    public void setStiffness(double k){ this.stiffness = Math.max(0, k); }
+    public void setDampingRatio(double z){ this.dampingRatio = Math.max(0, z); }
+    public void setMaxForce(double f){ this.maxForce = Math.max(0, f); }
+    public void setSlackEps(double s){ this.slackEps = Math.max(0, s); }
+
+    public void setDebugPersistOnMiss(boolean v){ this.debugPersistOnMiss = v; if (!v) persistActive = false; }
+
     public TetherState getState(){ return state; }
     public boolean isAttached(){ return state == TetherState.ATTACHED; }
     public void setVisible(boolean v){ view.setVisibleAndPickOnBounds(v); }
+
     public void setShowStartMarker(boolean show) { view.setShowStartMarker(show); }
     public void setShowEndMarker(boolean show)   { view.setShowEndMarker(show); }
-    public void setMarkerVisibility(boolean showStart, boolean showEnd) {
-        view.setMarkerVisibility(showStart, showEnd);
+
+    // --- lifecycle ---
+    public void fireFrom(Point3D origin, Point3D dir) {
+        persistActive = false; persistDir = null;
+        if (state == TetherState.FIRING || state == TetherState.ATTACHED) return;
+
+        // remember where the emitter is relative to the craft
+        Point3D craftPosNow = craft.getWorldPosition();
+        this.emitterOffsetParent = origin.subtract(craftPosNow);
+
+        this.fireOrigin = origin;
+        this.fireDir = dir.normalize();
+        this.prevTipDist = 0;
+        this.tipDist = 0;
+        this.restLength = 0;
+        this.attachedNode = null;
+        this.anchorLocal = null;
+        this.anchorWorld = null;
+        state = TetherState.FIRING;
+        setVisible(true);
     }
-    public boolean isStartMarkerVisible() { return view.isStartMarkerVisible(); }
-    public boolean isEndMarkerVisible()   { return view.isEndMarkerVisible(); }
-    
-public void fireFrom(Point3D origin, Point3D dir) {
-    // Clear any persisted debug
-    persistActive = false;
-    persistDir = null;
 
-    if (state == TetherState.FIRING || state == TetherState.ATTACHED) return;
-
-    // Capture emitter offset relative to the craft so if the craft moves,
-    // the start stays under the "belly" or "wings"
-    Point3D craftPosNow = craft.getWorldPosition();
-    this.emitterOffsetParent = origin.subtract(craftPosNow);
-
-    this.fireOrigin = origin;               // projectile math uses this fixed origin
-    this.fireDir = dir.normalize();
-    this.prevTipDist = 0;
-    this.tipDist = 0;
-    this.restLength = 0;
-    this.attachedNode = null;
-    this.anchorLocal = null;
-    this.anchorWorld = null;
-    state = TetherState.FIRING;
-    setVisible(true);
-}
-
-public void release() {
-    state = TetherState.DETACHED;
-    attachedNode = null;
-    anchorLocal = null;
-    anchorWorld = null;
-    tipDist = 0;
-    prevTipDist = 0;
-    restLength = 0;
-    emitterOffsetParent = Point3D.ZERO;  // clear
-    persistActive = false;
-    persistDir = null;
-    setVisible(false);
-}
+    public void release() {
+        state = TetherState.DETACHED;
+        attachedNode = null;
+        anchorLocal = null;
+        anchorWorld = null;
+        tipDist = 0;
+        prevTipDist = 0;
+        restLength = 0;
+        emitterOffsetParent = Point3D.ZERO;
+        persistActive = false;
+        persistDir = null;
+        setVisible(false);
+    }
 
     public void setPulling(boolean pulling) { this.pulling = pulling; }
 
-    public void update(double dtSeconds) {
+    public void update(double dt) {
         switch (state) {
-            case IDLE -> { /* no-op */ }
-            case FIRING -> updateFiring(dtSeconds);
-            case ATTACHED -> updateAttached(dtSeconds);
-            case DETACHED -> { /* allow persisted debug line to render */ }
+            case IDLE -> {}
+            case FIRING -> updateFiring(dt);
+            case ATTACHED -> updateAttached(dt);
+            case DETACHED -> {}
         }
-
+        // persisted debug beam on miss
         if (persistActive && state == TetherState.DETACHED && persistDir != null) {
-            Point3D start = craft.getWorldPosition();
-            Point3D dir = persistDir;
-            Point3D end = start.add(dir.multiply(maxRange));
-            Point3D startBase = start.add(dir.normalize().multiply(viewStartOffset));
+            Point3D start = craft.getWorldPosition().add(emitterOffsetParent);
+            Point3D end = start.add(persistDir.multiply(maxRange));
+            Point3D startBase = start.add(persistDir.multiply(viewStartOffset));
             setVisible(true);
             view.setStartAndEnd(startBase, end);
         }
     }
 
-private void updateFiring(double dt) {
-    prevTipDist = tipDist;
-    tipDist += projectileSpeed * dt;
+    private void updateFiring(double dt) {
+        prevTipDist = tipDist;
+        tipDist += projectileSpeed * dt;
 
-    if (tipDist > maxRange) {
-        if (debugPersistOnMiss) {
-            persistActive = true;
-            persistDir = fireDir;
-            state = TetherState.DETACHED;
-            return;
-        } else {
-            release();
-            return;
+        if (tipDist > maxRange) {
+            if (debugPersistOnMiss) {
+                persistActive = true;
+                persistDir = fireDir;
+                state = TetherState.DETACHED;
+                return;
+            } else { release(); return; }
         }
-    }
 
-    Point3D tipPrev = fireOrigin.add(fireDir.multiply(prevTipDist));
-    Point3D tipNow  = fireOrigin.add(fireDir.multiply(tipDist));
+        Point3D tipPrev = fireOrigin.add(fireDir.multiply(prevTipDist));
+        Point3D tipNow  = fireOrigin.add(fireDir.multiply(tipDist));
 
-    // Collision …
-    List<Node> collidables = collidablesSupplier.get();
-    double bestT = Double.POSITIVE_INFINITY;
-    Node bestNode = null;
-    Point3D bestHit = null;
-    for (Node n : collidables) {
-        Bounds b = n.getBoundsInParent();
-        Bounds ib = Intersections.inflate(b, aabbInflation);
-        OptionalDouble hitT = Intersections.segmentAabbFirstHit(tipPrev, tipNow, ib);
-        if (hitT.isPresent()) {
-            double t = hitT.getAsDouble();
-            if (t < bestT) {
-                bestT = t;
-                bestNode = n;
-                Point3D seg = tipNow.subtract(tipPrev);
-                bestHit = tipPrev.add(seg.multiply(t));
+        // segment vs AABB
+        List<Node> collidables = collidablesSupplier.get();
+        double bestT = Double.POSITIVE_INFINITY;
+        Node bestNode = null;
+        Point3D bestHit = null;
+
+        for (Node n : collidables) {
+            Bounds b = n.getBoundsInParent();
+            Bounds ib = Intersections.inflate(b, aabbInflation);
+            OptionalDouble hitT = Intersections.segmentAabbFirstHit(tipPrev, tipNow, ib);
+            if (hitT.isPresent()) {
+                double t = hitT.getAsDouble();
+                if (t < bestT) {
+                    bestT = t;
+                    bestNode = n;
+                    Point3D seg = tipNow.subtract(tipPrev);
+                    bestHit = tipPrev.add(seg.multiply(t));
+                }
             }
         }
+
+        Point3D craftPos = craft.getWorldPosition();
+        Point3D start    = craftPos.add(emitterOffsetParent);
+        Point3D startBase = start.add(fireDir.multiply(viewStartOffset));
+
+        if (bestNode != null) {
+            attachedNode = bestNode;
+            anchorLocal = attachedNode.parentToLocal(bestHit);
+            anchorWorld = bestHit;
+            restLength = Math.max(minRestLength, start.distance(bestHit));
+            state = TetherState.ATTACHED;
+            view.setStartAndEnd(startBase, bestHit);
+        } else {
+            view.setStartAndEnd(startBase, tipNow);
+        }
     }
 
-    // Start = craft position + emitter offset (parent/world space)
-    Point3D craftPos = craft.getWorldPosition();
-    Point3D start    = craftPos.add(emitterOffsetParent);
-    Point3D startBase = start.add(fireDir.normalize().multiply(viewStartOffset));
+    private void updateAttached(double dt) {
+        // start follows craft + emitter offset
+        Point3D craftPos = craft.getWorldPosition();
+        Point3D start = craftPos.add(emitterOffsetParent);
 
-    if (bestNode != null) {
-        attachedNode = bestNode;
-        anchorLocal = attachedNode.parentToLocal(bestHit);
-        anchorWorld = bestHit;
-        restLength = start.distance(bestHit);   // use the true start
-        state = TetherState.ATTACHED;
-        persistActive = false;
-        persistDir = null;
-        view.setStartAndEnd(startBase, bestHit);
-    } else {
-        view.setStartAndEnd(startBase, tipNow);
-    }
-}
+        // anchor follows target (if it moves)
+        anchorWorld = (attachedNode != null)
+                ? attachedNode.localToParent(anchorLocal)
+                : anchorWorld;
 
-private void updateAttached(double dt) {
-    // Start = craft position + emitter offset
-    Point3D craftPos = craft.getWorldPosition();
-    Point3D start    = craftPos.add(emitterOffsetParent);
+        if (anchorWorld == null) { release(); return; }
 
-    anchorWorld = (attachedNode != null)
-            ? attachedNode.localToParent(anchorLocal)
-            : anchorWorld;
+        // reel
+        if (pulling) restLength = Math.max(minRestLength, restLength - reelRate * dt);
 
-    if (anchorWorld == null) { release(); return; }
+        Point3D toAnchor = anchorWorld.subtract(start);
+        double dist = toAnchor.magnitude();
+        if (dist < 1e-6) {
+            view.setStartAndEnd(start, anchorWorld);
+            return;
+        }
 
-    Point3D toAnchor = anchorWorld.subtract(start);
-    double dist = toAnchor.magnitude();
-    if (dist < 1e-6) return;
+        Point3D dir = toAnchor.normalize();
 
-    Point3D dir = toAnchor.normalize();
-    Point3D startBase = start.add(dir.multiply(viewStartOffset));
+        // Visual
+        Point3D startBase = start.add(dir.multiply(viewStartOffset));
+        view.setStartAndEnd(startBase, anchorWorld);
 
-    // Visual
-    view.setStartAndEnd(startBase, anchorWorld);
-
-    // Reel
-    if (pulling) restLength = Math.max(0.0, restLength - reelRate * dt);
-
-    if (dist > restLength) {
+        // Spring-damper force if taut
         double stretch = dist - restLength;
-        double k = pullAccel;
-        Point3D accel = dir.multiply(k * (stretch / Math.max(dist, 1e-6)));
-        craft.applyPull(accel, dt);
-    }
-}
+        if (stretch > slackEps) {
+            double m = Math.max(0.001, craft.getMass());
+            double k = stiffness;
+            double c = 2.0 * dampingRatio * Math.sqrt(k * m); // near critical
 
+            double vAlong = craft.getVelocity().dotProduct(dir);
+
+            double forceMag = (k * stretch) - (c * vAlong);
+            if (forceMag < 0) forceMag = 0;         // no pushing
+            if (forceMag > maxForce) forceMag = maxForce;
+
+            craft.applyForce(dir.multiply(forceMag));
+        }
+    }
 }

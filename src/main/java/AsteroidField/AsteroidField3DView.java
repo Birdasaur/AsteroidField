@@ -2,28 +2,24 @@ package AsteroidField;
 
 import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;
-import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
+import AsteroidField.asteroids.providers.AsteroidMeshProvider;
+import AsteroidField.tether.CameraKinematicAdapter;
+import AsteroidField.tether.Tether;
+import AsteroidField.tether.TetherSystem;
+import AsteroidField.util.AsteroidUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import javafx.beans.binding.Bindings;
-import javafx.scene.Group;
-import javafx.scene.PerspectiveCamera;
-import javafx.scene.SubScene;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.paint.PhongMaterial;
-import javafx.scene.shape.DrawMode;
-import javafx.scene.shape.MeshView;
-import javafx.scene.shape.TriangleMesh;
-import javafx.scene.SceneAntialiasing;
 import java.util.function.Consumer;
+import javafx.geometry.Point3D;
+import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.PerspectiveCamera;
+import javafx.scene.SceneAntialiasing;
+import javafx.scene.SubScene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -33,23 +29,32 @@ import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.CullFace;
-
-// --- Tether imports ---
-import AsteroidField.tether.CameraKinematicAdapter;
-import AsteroidField.tether.TetherSystem;
-import javafx.geometry.Point3D;
+import javafx.scene.shape.DrawMode;
+import javafx.scene.shape.MeshView;
+import javafx.scene.shape.TriangleMesh;
 
 public class AsteroidField3DView extends Pane {
 
     private SubScene subScene;
     private PerspectiveCamera camera;
     private Group world;
+
+    // Primary asteroid + wireframe
     private MeshView asteroidView;
     private MeshView asteroidLinesView;
+
+    // Multi-asteroid support
+    private final List<MeshView> asteroidViews = new ArrayList<>();
+    private final List<MeshView> asteroidWireViews = new ArrayList<>();
+
     private AsteroidParameters params;
     private AsteroidMeshProvider currentProvider = AsteroidMeshProvider.PROVIDERS.values().iterator().next();
-
     private final Map<String, AsteroidParameters> familyParamsMap = new HashMap<>();
     private final Random seedRng = new Random();
 
@@ -58,10 +63,9 @@ public class AsteroidField3DView extends Pane {
     private Spinner<Integer> subdivSpinner;
     private Slider deformSlider;
     private TextField seedField;
-    private final List<MeshView> asteroidViews = new ArrayList<>();
     private MeshView selectedAsteroid = null;
 
-    // For dynamic family-specific controls
+    // Family-specific controls area
     private final HBox dynamicParamBox = new HBox(10);
 
     // Camera/app controls
@@ -71,15 +75,18 @@ public class AsteroidField3DView extends Pane {
     private FlyCameraController flyController;
     private TrackBallController trackballController;
 
-    // --- Tether system (new) ---
+    // Tether system
     private TetherSystem tetherSystem;
     private CameraKinematicAdapter cameraCraft;
     private ToggleButton tetherToggle;
 
+    // UI state / guards
+    private boolean updatingAsteroidCombo = false;
+    private boolean wireframeVisible = true;
+
     public AsteroidField3DView() {
         world = new Group();
-        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
-
+//        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
         params = new AsteroidParameters.Builder<>()
                 .radius(100)
                 .subdivisions(2)
@@ -89,21 +96,29 @@ public class AsteroidField3DView extends Pane {
                 .build();
         familyParamsMap.put(params.getFamilyName(), params);
 
+        // Primary asteroid (fill)
         asteroidView = new MeshView();
         asteroidView.setMaterial(new PhongMaterial(Color.GAINSBORO));
         asteroidView.setDrawMode(DrawMode.FILL);
         asteroidView.setCullFace(CullFace.NONE);
         world.getChildren().add(asteroidView);
 
+        // Primary wireframe
         asteroidLinesView = new MeshView();
         asteroidLinesView.setMaterial(new PhongMaterial(Color.ALICEBLUE));
         asteroidLinesView.setDrawMode(DrawMode.LINE);
         asteroidLinesView.setMouseTransparent(true);
         asteroidLinesView.setCullFace(CullFace.NONE);
         world.getChildren().add(asteroidLinesView);
-        Bindings.bindContent(asteroidLinesView.getTransforms(), asteroidView.getTransforms());
+
+        // Mirror wireframe pose to mesh (covers translate/rotate/scale + transforms)
+        AsteroidUtils.bindPose(asteroidLinesView, asteroidView);
 
         regenerateAsteroid();
+
+        // Track selectable asteroids (include primary)
+        asteroidViews.add(asteroidView);
+        asteroidWireViews.add(asteroidLinesView);
         selectedAsteroid = asteroidView;
 
         camera = new PerspectiveCamera(true);
@@ -116,14 +131,15 @@ public class AsteroidField3DView extends Pane {
         subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
 
-        // --- Wrap the camera in a kinematic rig so tethers can move it ---
+        // Camera as kinematic craft for tethers
         cameraCraft = CameraKinematicAdapter.attach(subScene, world);
-        // Optional: starting point
-        // cameraCraft.setPosition(0, 0, -600); // already absorbed above
+        cameraCraft.setMass(1.5);
+        cameraCraft.setLinearDampingPerSecond(0.18);
+        cameraCraft.setMaxSpeed(650);
 
-        // --- Tether system: collidables supplier returns just the single asteroid ---
+        // Tethers collide with ALL asteroid meshes
         java.util.function.Supplier<java.util.List<javafx.scene.Node>> collidables =
-                () -> java.util.Collections.singletonList(asteroidView);
+                () -> new ArrayList<>(asteroidViews);
 
         tetherSystem = new TetherSystem(
                 subScene,
@@ -132,16 +148,22 @@ public class AsteroidField3DView extends Pane {
                 collidables,
                 cameraCraft
         );
-        tetherSystem.setEnabled(false); // off by default; controlled by top-bar toggle
-        tetherSystem.getTether(0).setShowEndMarker(true);
-        tetherSystem.getTether(1).setShowEndMarker(true);
-        tetherSystem.getTether(0).setDebugPersistOnMiss(true);
-        tetherSystem.getTether(1).setDebugPersistOnMiss(true);
+        tetherSystem.setEnabled(false);
+
+        // Per-tether feel
+        for (int i = 0; i < 2; i++) {
+            Tether t = tetherSystem.getTether(i);
+            if (t != null) {
+                t.setStiffness(160);
+                t.setDampingRatio(0.9);
+                t.setMaxForce(900);
+                t.setSlackEps(0.02);
+                t.setReelRate(240);
+                t.setShowEndMarker(true);
+                t.setDebugPersistOnMiss(true);
+            }
+        }
         tetherSystem.setSymmetricWingOffsets(20, 50, 5);
-//        tetherSystem.setEmitterOffsetsLocal(
-//            new Point3D(0, -15, 8),  // tether 0
-//            new Point3D(0, -15, 8)   // tether 1
-//        );        
 
         flyController = new FlyCameraController(camera, subScene);
         flyController.setSpeed(150);
@@ -166,27 +188,42 @@ public class AsteroidField3DView extends Pane {
         cameraModeToggle.setTooltip(new Tooltip("Toggle between Fly and Trackball camera"));
 
         resetCameraBtn = new Button("Reset Camera");
-        resetCameraBtn.setTooltip(new Tooltip("Reset camera to default position"));
+        resetCameraBtn.setTooltip(new Tooltip("Reset camera & tethers to default"));
 
         ToggleButton wireframeToggle = new ToggleButton("Show Wireframe");
         wireframeToggle.setSelected(true);
         wireframeToggle.setTooltip(new Tooltip("Show/hide asteroid wireframe overlay"));
         wireframeToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-            if (asteroidLinesView != null) asteroidLinesView.setVisible(isSelected);
+            wireframeVisible = isSelected;
+            for (MeshView mv : asteroidWireViews) mv.setVisible(isSelected);
         });
-        if (asteroidLinesView != null) asteroidLinesView.setVisible(wireframeToggle.isSelected());
+        for (MeshView mv : asteroidWireViews) mv.setVisible(wireframeToggle.isSelected());
+        wireframeVisible = wireframeToggle.isSelected();
 
-        // --- Tethers toggle (NEW) ---
         tetherToggle = new ToggleButton("Tethers (beta)");
         tetherToggle.setTooltip(new Tooltip("Enable/disable tether mechanic. LMB/RMB fire. Hold SHIFT to pull. CTRL to release."));
         tetherToggle.selectedProperty().addListener((obs, was, is) -> {
             if (tetherSystem != null) tetherSystem.setEnabled(is);
         });
 
+        Button spawn3Btn = new Button("Spawn 3 Asteroids (test)");
+        spawn3Btn.setTooltip(new Tooltip("Add two more asteroids at spaced positions for tether testing"));
+        spawn3Btn.setOnAction(e -> spawnTestAsteroids());
+
+        Button clearExtrasBtn = new Button("Clear Extras");
+        clearExtrasBtn.setTooltip(new Tooltip("Remove extra asteroids and keep only the primary"));
+        clearExtrasBtn.setOnAction(e -> clearExtraAsteroids());
+
         asteroidSelectorBox = new ComboBox<>();
-        asteroidViews.add(asteroidView);
         updateAsteroidSelectorBox();
         asteroidSelectorBox.setTooltip(new Tooltip("Select asteroid to rotate or highlight"));
+        asteroidSelectorBox.setOnAction(e -> {
+            if (updatingAsteroidCombo) return; // guard recursion
+            int idx = asteroidSelectorBox.getSelectionModel().getSelectedIndex();
+            if (idx >= 0 && idx < asteroidViews.size()) {
+                setSelectedAsteroid(asteroidViews.get(idx));
+            }
+        });
 
         cameraModeToggle.setOnAction(e -> {
             boolean trackballMode = cameraModeToggle.isSelected();
@@ -201,10 +238,9 @@ public class AsteroidField3DView extends Pane {
         });
 
         resetCameraBtn.setOnAction(e -> {
-            // Reset camera rig position (zero velocity) so the tethers test feels consistent
             cameraCraft.resetPosition(0, 0, -600);
+            if (tetherSystem != null) tetherSystem.releaseAll();
 
-            // Keep previous behavior of resetting camera rotation
             camera.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0, 1, 0));
             camera.setRotate(0);
             if (selectedAsteroid != null) {
@@ -215,18 +251,13 @@ public class AsteroidField3DView extends Pane {
             }
         });
 
-        asteroidSelectorBox.setOnAction(e -> {
-            int idx = asteroidSelectorBox.getSelectionModel().getSelectedIndex();
-            if (idx >= 0 && idx < asteroidViews.size()) {
-                setSelectedAsteroid(asteroidViews.get(idx));
-            }
-        });
-
         topBar.getChildren().addAll(
                 cameraModeToggle,
                 resetCameraBtn,
                 wireframeToggle,
                 tetherToggle,
+                spawn3Btn,
+                clearExtrasBtn,
                 new Label("Asteroid:"),
                 asteroidSelectorBox
         );
@@ -234,16 +265,32 @@ public class AsteroidField3DView extends Pane {
     }
 
     private void updateAsteroidSelectorBox() {
-        asteroidSelectorBox.getItems().clear();
-        for (int i = 0; i < asteroidViews.size(); i++) {
-            asteroidSelectorBox.getItems().add("Asteroid " + (i + 1));
-        }
-        if (!asteroidViews.isEmpty()) {
-            asteroidSelectorBox.getSelectionModel().select(asteroidViews.indexOf(selectedAsteroid));
+        if (asteroidSelectorBox == null) return;
+        updatingAsteroidCombo = true;
+        try {
+            asteroidSelectorBox.getItems().clear();
+            for (int i = 0; i < asteroidViews.size(); i++) {
+                asteroidSelectorBox.getItems().add("Asteroid " + (i + 1));
+            }
+            int selIndex = (selectedAsteroid != null) ? asteroidViews.indexOf(selectedAsteroid) : -1;
+            if (selIndex < 0 && !asteroidViews.isEmpty()) selIndex = 0;
+            asteroidSelectorBox.getSelectionModel().select(selIndex);
+        } finally {
+            updatingAsteroidCombo = false;
         }
     }
 
     public void setSelectedAsteroid(MeshView meshView) {
+        if (selectedAsteroid == meshView) {
+            updatingAsteroidCombo = true;
+            try {
+                int idx = asteroidViews.indexOf(selectedAsteroid);
+                if (idx >= 0) asteroidSelectorBox.getSelectionModel().select(idx);
+            } finally {
+                updatingAsteroidCombo = false;
+            }
+            return;
+        }
         if (selectedAsteroid != null) {
             selectedAsteroid.setMaterial(new PhongMaterial(Color.GAINSBORO));
         }
@@ -251,13 +298,22 @@ public class AsteroidField3DView extends Pane {
         if (selectedAsteroid != null) {
             selectedAsteroid.setMaterial(new PhongMaterial(Color.LIGHTGOLDENRODYELLOW));
             trackballController.setSelected(selectedAsteroid);
-            updateAsteroidSelectorBox();
+        }
+        updatingAsteroidCombo = true;
+        try {
+            int idx = asteroidViews.indexOf(selectedAsteroid);
+            if (idx >= 0) asteroidSelectorBox.getSelectionModel().select(idx);
+        } finally {
+            updatingAsteroidCombo = false;
         }
     }
 
+    /** Adds an asteroid (and a bound wireframe) to the world and UI lists. */
     public void addAsteroid(MeshView meshView) {
+        MeshView wire = AsteroidUtils.createWireframeFor(meshView, Color.ALICEBLUE, wireframeVisible);
         asteroidViews.add(meshView);
-        world.getChildren().add(meshView);
+        asteroidWireViews.add(wire);
+        world.getChildren().addAll(meshView, wire);
         updateAsteroidSelectorBox();
     }
 
@@ -286,7 +342,6 @@ public class AsteroidField3DView extends Pane {
 
         Button randomizeBtn = new Button("Randomize");
 
-        // --- Unified update for all controls (shared + dynamic) ---
         Consumer<Void> mergedControlUpdate = unused -> {
             params = buildMergedParams();
             familyParamsMap.put(params.getFamilyName(), params);
@@ -306,16 +361,11 @@ public class AsteroidField3DView extends Pane {
 
         familyBox.setOnAction(e -> {
             familyParamsMap.put(params.getFamilyName(), buildMergedParams());
-
             String selected = familyBox.getValue();
             currentProvider = AsteroidMeshProvider.PROVIDERS.get(selected);
-
             AsteroidParameters newParams = familyParamsMap.get(selected);
-            if (newParams == null) {
-                newParams = buildParamsForFamily(selected, params);
-            }
+            if (newParams == null) newParams = AsteroidUtils.buildParamsForFamily(selected, params);
             params = newParams;
-
             updateSharedControlValues();
             updateDynamicParameterControls();
             regenerateAsteroid();
@@ -332,21 +382,17 @@ public class AsteroidField3DView extends Pane {
         );
         return hbox;
     }
-    
+
     public VBox getDynamicFamilyBox() {
         VBox box = new VBox(10, new Label("Family Controls"), dynamicParamBox);
         box.setMinWidth(220);
         return box;
     }
 
-    /**
-     * Update family-specific parameter controls.
-     */
+    /** Update family-specific parameter controls. */
     private void updateDynamicParameterControls() {
         dynamicParamBox.getChildren().clear();
-
         if (currentProvider instanceof AsteroidFamilyUI uiProvider) {
-            // Pass the merged update as callback
             Node controls = uiProvider.createDynamicControls(params, newParams -> {
                 params = buildMergedParams();
                 familyParamsMap.put(params.getFamilyName(), params);
@@ -357,12 +403,11 @@ public class AsteroidField3DView extends Pane {
         }
     }
 
+    /** Regenerates ONLY the primary asteroid from current params. */
     public void regenerateAsteroid() {
-        AsteroidMeshProvider meshProvider = AsteroidMeshProvider.PROVIDERS.get(params.getFamilyName());
-        if (meshProvider == null) {
-            meshProvider = new AsteroidMeshProvider.Default();
-        }
-        AsteroidGenerator generator = new AsteroidGenerator(meshProvider, params);
+        AsteroidMeshProvider provider = AsteroidMeshProvider.PROVIDERS.get(params.getFamilyName());
+        if (provider == null) provider = new AsteroidMeshProvider.Default();
+        AsteroidGenerator generator = new AsteroidGenerator(provider, params);
         TriangleMesh mesh = generator.generateAsteroid();
         asteroidView.setMesh(mesh);
         asteroidLinesView.setMesh(mesh);
@@ -389,12 +434,11 @@ public class AsteroidField3DView extends Pane {
                 : params;
 
         AsteroidParameters.Builder<?> builder = familyParams.toBuilder();
-        builder
-                .radius(radiusSlider.getValue())
-                .subdivisions(subdivSpinner.getValue())
-                .deformation(deformSlider.getValue())
-                .seed(getCurrentSeed())
-                .familyName(familyParams.getFamilyName());
+        builder.radius(radiusSlider.getValue())
+               .subdivisions(subdivSpinner.getValue())
+               .deformation(deformSlider.getValue())
+               .seed(getCurrentSeed())
+               .familyName(familyParams.getFamilyName());
         return builder.build();
     }
 
@@ -406,18 +450,57 @@ public class AsteroidField3DView extends Pane {
         }
     }
 
-    private AsteroidParameters buildParamsForFamily(String family, AsteroidParameters oldParams) {
-        AsteroidMeshProvider provider = AsteroidMeshProvider.PROVIDERS.get(family);
-        if (provider instanceof AsteroidFamilyUI uiProvider) {
-            return uiProvider.buildDefaultParamsFrom(oldParams);
-        }
-        // ...handle other family types here if needed...
-        return new AsteroidParameters.Builder<>()
-                .radius(oldParams.getRadius())
-                .subdivisions(oldParams.getSubdivisions())
-                .deformation(oldParams.getDeformation())
-                .seed(oldParams.getSeed())
-                .familyName(family)
+
+    /** Spawn two extra asteroids (for a total of three) at spaced positions to test multi-tethers. */
+    private void spawnTestAsteroids() {
+        if (asteroidViews.size() >= 3) return;
+
+        AsteroidParameters p2 = params.toBuilder()
+                .seed(seedRng.nextLong())
+                .radius(params.getRadius() * 0.9)
                 .build();
+        MeshView a2 = AsteroidUtils.createAsteroidAt(p2, new Point3D(500, +300, 0));
+        addAsteroid(a2);
+
+        AsteroidParameters p3 = params.toBuilder()
+                .seed(seedRng.nextLong())
+                .radius(params.getRadius() * 0.8)
+                .build();
+        MeshView a3 = AsteroidUtils.createAsteroidAt(p3, new Point3D(-500, -50, +300));
+        addAsteroid(a3);
+
+        AsteroidParameters p4 = params.toBuilder()
+                .seed(seedRng.nextLong())
+                .radius(params.getRadius() * 0.8)
+                .build();
+        MeshView a4 = AsteroidUtils.createAsteroidAt(p4, new Point3D(500, -300, 0));
+        addAsteroid(a4);
+        
+        // Keep selection on primary
+        updatingAsteroidCombo = true;
+        try {
+            int selIndex = asteroidViews.indexOf(selectedAsteroid);
+            if (selIndex < 0) selIndex = 0;
+            asteroidSelectorBox.getSelectionModel().select(selIndex);
+        } finally {
+            updatingAsteroidCombo = false;
+        }
+    }
+
+    /** Remove any extra asteroids and keep only the primary. */
+    private void clearExtraAsteroids() {
+        while (asteroidViews.size() > 1) {
+            int last = asteroidViews.size() - 1;
+            MeshView mesh = asteroidViews.remove(last);
+            MeshView wire = asteroidWireViews.remove(last);
+            world.getChildren().removeAll(mesh, wire);
+        }
+        updatingAsteroidCombo = true;
+        try {
+            selectedAsteroid = asteroidViews.get(0);
+            asteroidSelectorBox.getSelectionModel().select(0);
+        } finally {
+            updatingAsteroidCombo = false;
+        }
     }
 }

@@ -1,6 +1,7 @@
 package AsteroidField.tether;
 
-/** Optional extension so the tether system can tick inertia/damping each frame. */
-public interface KinematicCraft extends Tether.SpacecraftAdapter {
-    void tick(double dtSeconds);
+/** Minimal interface for anything we integrate per physics step. */
+public interface KinematicCraft {
+    /** Advance simulation by a fixed time step (seconds). */
+    void tick(double dt);
 }
