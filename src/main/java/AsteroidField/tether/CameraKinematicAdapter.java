@@ -2,6 +2,7 @@ package AsteroidField.tether;
 
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
@@ -30,6 +31,7 @@ public class CameraKinematicAdapter implements KinematicCraft, Tether.Spacecraft
         this.rig = rig;
         this.worldRoot = worldRoot;
     }
+    public Node getRigNode() { return rig; } 
 
     /** Wrap camera in a rig under worldRoot and return the adapter. */
     public static CameraKinematicAdapter attach(SubScene subScene, Group worldRoot) {

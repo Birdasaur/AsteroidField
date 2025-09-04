@@ -1,10 +1,12 @@
 package AsteroidField.tether;
 
+import AsteroidField.tether.vfx.AnchorSparkVFX;
 import javafx.geometry.Bounds;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.paint.Color;
+import javafx.util.Duration;
 
 import java.util.List;
 import java.util.OptionalDouble;
@@ -30,7 +32,11 @@ public class Tether {
 
     private final int id;
     private final Group parent3D;
-    private final TetherView view;
+    private final TetherView tetherView;
+
+    // Visual colors
+    private final Color baseColor;
+    private final Color lockColor = Color.LIMEGREEN; // color while attached
 
     // Projectile/firing
     private double projectileSpeed = 250;
@@ -74,6 +80,9 @@ public class Tether {
     private boolean persistActive = false;
     private Point3D persistDir = null;
 
+    // One-shot visual latch for attach
+    private boolean wasAttached = false;
+
     public Tether(int id, Group parent3D, Supplier<List<Node>> collidablesSupplier,
                   SpacecraftAdapter craft, Color color) {
         this.id = id;
@@ -81,8 +90,10 @@ public class Tether {
         this.collidablesSupplier = collidablesSupplier;
         this.craft = craft;
 
-        this.view = new TetherView(0, /*radius placeholder*/ 3.0f, color);
-        parent3D.getChildren().add(view);
+        this.baseColor = (color != null) ? color : Color.CYAN;
+        this.tetherView = new TetherView(0, /*radius placeholder*/ 3.0f, this.baseColor);
+        this.tetherView.setBeamColor(this.baseColor);
+        parent3D.getChildren().add(tetherView);
         setVisible(false);
     }
 
@@ -109,10 +120,10 @@ public class Tether {
 
     public TetherState getState(){ return state; }
     public boolean isAttached(){ return state == TetherState.ATTACHED; }
-    public void setVisible(boolean v){ view.setVisibleAndPickOnBounds(v); }
+    public void setVisible(boolean v){ tetherView.setVisibleAndPickOnBounds(v); }
 
-    public void setShowStartMarker(boolean show) { view.setShowStartMarker(show); }
-    public void setShowEndMarker(boolean show)   { view.setShowEndMarker(show); }
+    public void setShowStartMarker(boolean show) { tetherView.setShowStartMarker(show); }
+    public void setShowEndMarker(boolean show)   { tetherView.setShowEndMarker(show); }
 
     // --- lifecycle ---
     public void fireFrom(Point3D origin, Point3D dir) {
@@ -131,8 +142,12 @@ public class Tether {
         this.attachedNode = null;
         this.anchorLocal = null;
         this.anchorWorld = null;
+        this.wasAttached = false;
+
         state = TetherState.FIRING;
         setVisible(true);
+        // revert visuals in case we were previously attached
+        tetherView.setBeamColor(baseColor);
     }
 
     public void release() {
@@ -146,6 +161,8 @@ public class Tether {
         emitterOffsetParent = Point3D.ZERO;
         persistActive = false;
         persistDir = null;
+        wasAttached = false;
+        tetherView.setBeamColor(baseColor); // restore default
         setVisible(false);
     }
 
@@ -164,7 +181,7 @@ public class Tether {
             Point3D end = start.add(persistDir.multiply(maxRange));
             Point3D startBase = start.add(persistDir.multiply(viewStartOffset));
             setVisible(true);
-            view.setStartAndEnd(startBase, end);
+            tetherView.setStartAndEnd(startBase, end);
         }
     }
 
@@ -189,6 +206,7 @@ public class Tether {
         double bestT = Double.POSITIVE_INFINITY;
         Node bestNode = null;
         Point3D bestHit = null;
+        Bounds bestBounds = null;
 
         for (Node n : collidables) {
             Bounds b = n.getBoundsInParent();
@@ -201,6 +219,7 @@ public class Tether {
                     bestNode = n;
                     Point3D seg = tipNow.subtract(tipPrev);
                     bestHit = tipPrev.add(seg.multiply(t));
+                    bestBounds = b;
                 }
             }
         }
@@ -215,9 +234,14 @@ public class Tether {
             anchorWorld = bestHit;
             restLength = Math.max(minRestLength, start.distance(bestHit));
             state = TetherState.ATTACHED;
-            view.setStartAndEnd(startBase, bestHit);
+
+            // Immediate visual alignment
+            tetherView.setStartAndEnd(startBase, bestHit);
+
+            // One-shot attach VFX & beam pulse
+            onAttachedFirstTime(bestHit, estimateOutwardNormal(bestBounds, bestHit, fireDir));
         } else {
-            view.setStartAndEnd(startBase, tipNow);
+            tetherView.setStartAndEnd(startBase, tipNow);
         }
     }
 
@@ -233,13 +257,22 @@ public class Tether {
 
         if (anchorWorld == null) { release(); return; }
 
+        // Ensure one-shot visuals fired even if state was forced to ATTACHED externally
+        if (!wasAttached) {
+            onAttachedFirstTime(anchorWorld, estimateOutwardNormal(
+                    (attachedNode != null) ? attachedNode.getBoundsInParent() : null,
+                    anchorWorld,
+                    anchorWorld.subtract(start).normalize()
+            ));
+        }
+
         // reel
         if (pulling) restLength = Math.max(minRestLength, restLength - reelRate * dt);
 
         Point3D toAnchor = anchorWorld.subtract(start);
         double dist = toAnchor.magnitude();
         if (dist < 1e-6) {
-            view.setStartAndEnd(start, anchorWorld);
+            tetherView.setStartAndEnd(start, anchorWorld);
             return;
         }
 
@@ -247,7 +280,7 @@ public class Tether {
 
         // Visual
         Point3D startBase = start.add(dir.multiply(viewStartOffset));
-        view.setStartAndEnd(startBase, anchorWorld);
+        tetherView.setStartAndEnd(startBase, anchorWorld);
 
         // Spring-damper force if taut
         double stretch = dist - restLength;
@@ -262,12 +295,39 @@ public class Tether {
             if (forceMag > maxForce) forceMag = maxForce;
             craft.applyForce(dir.multiply(forceMag));
 
-            // --- NEW: small perpendicular damping ---
+            // Perpendicular damping (reduces "twang" without killing swing)
             var v        = craft.getVelocity();
             var vParallel= dir.multiply(vAlong);
             var vPerp    = v.subtract(vParallel);
-            double cPerp = perpDampingRatio * 2.0 * Math.sqrt(k * m); // scaled to “feel right”
+            double cPerp = perpDampingRatio * 2.0 * Math.sqrt(k * m);
             craft.applyForce(vPerp.multiply(-cPerp));
         }
+    }
+
+    // ----- visual one-shot on attach -----
+    private void onAttachedFirstTime(Point3D hitWorld, Point3D outwardNormal) {
+        if (wasAttached) return;
+        wasAttached = true;
+
+        // Spark burst at impact
+        AnchorSparkVFX.play(parent3D, hitWorld, outwardNormal, Color.YELLOW);
+
+        // Beam feedback: temporary color + thickness pulse
+        tetherView.setBeamColor(lockColor);
+        tetherView.pulseThickness(1.8, Duration.millis(160));
+    }
+
+    private static Point3D estimateOutwardNormal(Bounds b, Point3D hit, Point3D fallbackDir) {
+        if (b != null) {
+            double cx = (b.getMinX() + b.getMaxX()) * 0.5;
+            double cy = (b.getMinY() + b.getMaxY()) * 0.5;
+            double cz = (b.getMinZ() + b.getMaxZ()) * 0.5;
+            Point3D normal = hit.subtract(new Point3D(cx, cy, cz));
+            if (normal.magnitude() > 1e-6) return normal.normalize();
+        }
+        // Fall back to rope direction at impact time (or +Z if unknown)
+        return (fallbackDir != null && fallbackDir.magnitude() > 1e-6)
+                ? fallbackDir.normalize()
+                : new Point3D(0, 0, 1);
     }
 }

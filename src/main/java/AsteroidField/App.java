@@ -56,11 +56,6 @@ public class App extends Application {
         CameraViewLite topView  = topOverlay.getCameraView();
         CameraViewLite sideView = sideOverlay.getCameraView();
 
-//        // Top: from above (y = -DIST), looking down (+Y) at (cx,cy,cz)
-//        CameraViewLite.poseLookAt(topView,  cx, -DIST, cz,   cx, cy, cz,  FOV);
-//        // Side: from left (x = cx - DIST), looking right (+X) at (cx,cy,cz)
-//        CameraViewLite.poseLookAt(sideView, cx - DIST, cy, cz,   cx, cy, cz,  FOV);
-
         // Top-down (+Y): from above
         CameraViewLite.poseLookAt(topView,  cx, cy - DIST, cz,  cx, cy, cz,  FOV);
         // Side (+X): from left
@@ -74,6 +69,9 @@ public class App extends Application {
         StackPane.setMargin(topOverlay, hudPad);
         StackPane.setMargin(sideOverlay, hudPad);
         root.setCenter(centerStack);
+        
+        topOverlay.getCameraView().setSnapshotOnlyNodes(fieldView.getDebugCraft());
+        sideOverlay.getCameraView().setSnapshotOnlyNodes(fieldView.getDebugCraft());
 
         // --- Scene ---
         Scene scene = new Scene(root, 1600, 800, true);

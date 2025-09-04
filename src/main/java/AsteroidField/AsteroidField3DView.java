@@ -5,6 +5,7 @@ import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
+import AsteroidField.spacecraft.DebugCraft;
 import AsteroidField.tether.CameraKinematicAdapter;
 import AsteroidField.tether.Tether;
 import AsteroidField.tether.TetherSystem;
@@ -43,7 +44,6 @@ import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 
 public class AsteroidField3DView extends Pane {
-
     private SubScene subScene;
     private PerspectiveCamera camera;
     private Group world;
@@ -72,7 +72,7 @@ public class AsteroidField3DView extends Pane {
     private ComboBox<String> asteroidSelectorBox;
     private ThrusterController thrusterController;
     private TrackBallController trackballController;
-
+    private DebugCraft debugCraft;
     // Tether system
     private TetherSystem tetherSystem;
     private CameraKinematicAdapter cameraCraft;
@@ -84,7 +84,8 @@ public class AsteroidField3DView extends Pane {
 
     public AsteroidField3DView() {
         world = new Group();
-        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
+        //@DEBUG SMP sometimes an ambient light helps figure stuff out.
+        //world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
         params = new AsteroidParameters.Builder<>()
                 .radius(100)
                 .subdivisions(2)
@@ -174,6 +175,13 @@ public class AsteroidField3DView extends Pane {
         trackballController = new TrackBallController(subScene, camera, asteroidViews);
         trackballController.setEnabled(true);
 
+        debugCraft = new DebugCraft();
+        debugCraft.setScale(1);              // tune size to your scene scale
+        debugCraft.setVisible(false);          // hidden in main view by default
+        world.getChildren().add(debugCraft);
+        // Bind to the moving rig node (NOT the camera node)
+        debugCraft.followNode(getCameraFrameNode());
+
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
@@ -224,7 +232,12 @@ public class AsteroidField3DView extends Pane {
                 setSelectedAsteroid(asteroidViews.get(idx));
             }
         });
-
+        ToggleButton showCraft = new ToggleButton("Show Craft Proxy");
+        showCraft.setSelected(false);
+        showCraft.setTooltip(new Tooltip("Toggle ship proxy for debugging (shown in mini-cams)"));
+        showCraft.selectedProperty().addListener((o, was, isSel) -> {
+            if (getDebugCraft() != null) getDebugCraft().setVisible(isSel);
+        });
         cameraModeToggle.setOnAction(e -> {
             boolean trackballMode = cameraModeToggle.isSelected();
             if (trackballMode) {
@@ -258,6 +271,7 @@ public class AsteroidField3DView extends Pane {
                 tetherToggle,
                 spawn3Btn,
                 clearExtrasBtn,
+                showCraft,                 
                 new Label("Asteroid:"),
                 asteroidSelectorBox
         );
@@ -510,7 +524,20 @@ public class AsteroidField3DView extends Pane {
     public SubScene getSubScene() { return subScene; }
     public Group getWorldRoot()   { return world; }
     public PerspectiveCamera getMainCamera() { return camera; }
-    public void addCameraNode(Node cam) {
-        world.getChildren().add(cam); 
+    public void addCameraNode(Node cam) { world.getChildren().add(cam); }
+    public Node getCameraFrameNode() { return cameraCraft.getRigNode(); }
+
+    /**
+     * @return the debugCraft
+     */
+    public DebugCraft getDebugCraft() {
+        return debugCraft;
+    }
+
+    /**
+     * @param debugCraft the debugCraft to set
+     */
+    public void setDebugCraft(DebugCraft debugCraft) {
+        this.debugCraft = debugCraft;
     }
 }

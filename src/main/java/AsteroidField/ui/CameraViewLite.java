@@ -40,6 +40,8 @@ public final class CameraViewLite extends ImageView {
 
     // For optional first-person navigation (if you enable it)
     private double mousePosX, mousePosY, mouseOldX, mouseOldY, mouseDeltaX, mouseDeltaY;
+// CameraViewLite.java  (additions)
+private final java.util.List<javafx.scene.Node> snapshotOnlyNodes = new java.util.ArrayList<>();
 
     public CameraViewLite(SubScene scene) {
         // Require root to be a Group (matches your original)
@@ -129,23 +131,36 @@ public final class CameraViewLite extends ImageView {
         return ((a % 360) + 540) % 360 - 180;
     }
 
-    private void redraw() {
-        double w = getFitWidth();
-        double h = getFitHeight();
+public void setSnapshotOnlyNodes(javafx.scene.Node... nodes) {
+    snapshotOnlyNodes.clear();
+    if (nodes != null) java.util.Collections.addAll(snapshotOnlyNodes, nodes);
+}
 
-        if (w <= 1 || h <= 1) {
-            return; // don’t snapshot yet; wait until layout gives us real size
-        }
+private void redraw() {
+    double w = getFitWidth(), h = getFitHeight();
+    if (w < 2 || h < 2) return;
 
-        params.setViewport(new Rectangle2D(0, 0, w, h));
+    params.setViewport(new javafx.geometry.Rectangle2D(0, 0, w, h));
 
+    // --- show craft only for this snapshot ---
+    java.util.ArrayList<Boolean> prev = new java.util.ArrayList<>(snapshotOnlyNodes.size());
+    for (var n : snapshotOnlyNodes) { prev.add(n.isVisible()); n.setVisible(true); }
+
+    try {
         if (image == null || (int) image.getWidth() != (int) w || (int) image.getHeight() != (int) h) {
             image = worldToView.snapshot(params, null);
         } else {
             worldToView.snapshot(params, image);
         }
         setImage(image);
+    } finally {
+        // restore original visibilities
+        for (int i = 0; i < snapshotOnlyNodes.size(); i++) {
+            snapshotOnlyNodes.get(i).setVisible(prev.get(i));
+        }
     }
+}
+
     /**
      * Aim a CameraViewLite at a target from an eye position.
      * JavaFX camera looks along -Z by default; we convert to yaw(Y) + pitch(X) with world-space translate on the rig.
