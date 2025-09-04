@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.util;
 
 import javafx.scene.SubScene;
 import javafx.scene.input.MouseEvent;

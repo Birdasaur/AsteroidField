@@ -1,4 +1,4 @@
-package AsteroidField.editor.material;
+package AsteroidField.editor;
 
 import javafx.geometry.Point2D;
 import javafx.scene.Group;

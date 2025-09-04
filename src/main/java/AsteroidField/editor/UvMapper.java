@@ -1,4 +1,4 @@
-package AsteroidField.editor.material;
+package AsteroidField.editor;
 
 import javafx.scene.shape.TriangleMesh;
 

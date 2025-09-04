@@ -1,5 +1,6 @@
 package AsteroidField;
 
+import AsteroidField.util.TrackBallController;
 import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
@@ -46,11 +47,9 @@ public class AsteroidField3DView extends Pane {
     private SubScene subScene;
     private PerspectiveCamera camera;
     private Group world;
-
     // Primary asteroid + wireframe
     private MeshView asteroidView;
     private MeshView asteroidLinesView;
-
     // Multi-asteroid support
     private final List<MeshView> asteroidViews = new ArrayList<>();
     private final List<MeshView> asteroidWireViews = new ArrayList<>();
@@ -59,17 +58,14 @@ public class AsteroidField3DView extends Pane {
     private AsteroidMeshProvider currentProvider = AsteroidMeshProvider.PROVIDERS.values().iterator().next();
     private final Map<String, AsteroidParameters> familyParamsMap = new HashMap<>();
     private final Random seedRng = new Random();
-
     // Shared control fields
     private Slider radiusSlider;
     private Spinner<Integer> subdivSpinner;
     private Slider deformSlider;
     private TextField seedField;
     private MeshView selectedAsteroid = null;
-
     // Family-specific controls area
     private final HBox dynamicParamBox = new HBox(10);
-
     // Camera/app controls
     private ToggleButton cameraModeToggle;
     private Button resetCameraBtn;
@@ -88,7 +84,7 @@ public class AsteroidField3DView extends Pane {
 
     public AsteroidField3DView() {
         world = new Group();
-//        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
+        world.getChildren().add(new javafx.scene.AmbientLight(Color.WHITE));
         params = new AsteroidParameters.Builder<>()
                 .radius(100)
                 .subdivisions(2)
@@ -128,7 +124,7 @@ public class AsteroidField3DView extends Pane {
         camera.setFarClip(10000.0);
         camera.setFieldOfView(45);
         camera.setTranslateZ(-600);
-
+        
         subScene = new SubScene(world, 800, 600, true, SceneAntialiasing.BALANCED);
         subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
@@ -510,5 +506,11 @@ public class AsteroidField3DView extends Pane {
         } finally {
             updatingAsteroidCombo = false;
         }
+    }
+    public SubScene getSubScene() { return subScene; }
+    public Group getWorldRoot()   { return world; }
+    public PerspectiveCamera getMainCamera() { return camera; }
+    public void addCameraNode(Node cam) {
+        world.getChildren().add(cam); 
     }
 }

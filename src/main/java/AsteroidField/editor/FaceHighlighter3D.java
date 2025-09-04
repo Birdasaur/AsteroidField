@@ -1,4 +1,4 @@
-package AsteroidField.editor.material;
+package AsteroidField.editor;
 
 import javafx.beans.binding.Bindings;
 import javafx.scene.paint.Color;
