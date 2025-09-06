@@ -1,5 +1,6 @@
 package AsteroidField.tether;
 
+import AsteroidField.tether.materials.ProceduralTetherMaterial;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -9,7 +10,6 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.shape.DrawMode;
@@ -18,26 +18,18 @@ import javafx.scene.transform.Affine;
 import javafx.util.Duration;
 
 /**
- * Tether view that uses a single Affine to orient the cylinder.
- * - Cylinder is centered at its local origin, height runs along local +Y from -h/2..+h/2
- * - We set height = |end-start|
- * - Build an orthonormal basis where local Y maps to (end-start).normalize()
- * - Place the cylinder center at the midpoint
- *
- * Adds:
- *   - setBeamColor(Color)        : instant color change
- *   - fadeBeamColor(Color, dur)  : smooth color fade
- *   - pulseThickness(scale, dur) : temporary thickness bump (scaleX/Z only)
- *
- * Start/End markers remain independently togglable for debugging.
+ * Beam between two points using a single Affine to orient a Cylinder.
+ * Integrates a cached procedural material for high performance.
  */
 public class TetherView extends Group {
 
     private final Cylinder beam;
     private final Affine   xform;
 
-    // Material + color handling
-    private final PhongMaterial beamMat;
+    // Procedural material (cached images; fast swaps)
+    private final ProceduralTetherMaterial pmat;
+
+    // Color animation façade (compatible with your existing API)
     private final ObjectProperty<Color> beamColor = new SimpleObjectProperty<>();
     private Timeline colorFadeTL;
 
@@ -52,39 +44,52 @@ public class TetherView extends Group {
     private boolean showStartMarker = false;
     private boolean showEndMarker   = false;
 
+    // Geometry + throttling
+    private final double radius;
+    private double lastLen = -1;
+    private long   lastStaticEnsureNanos = 0;
+    private static final long ENSURE_INTERVAL_NS = 50_000_000L; // 50ms min interval
+
+    // Optional: lock visual state (not strictly needed for perf mode)
+    private boolean lockedVisual = false;
+
     public TetherView(int radialDivisionsIgnored, float radius, Color color) {
-        // Beam
+        this.radius = radius;
+
+        // Beam geometry
         beam = new Cylinder(radius, 1.0);
-        beamMat = new PhongMaterial(color != null ? color : Color.CYAN);
-        beam.setMaterial(beamMat);
         beam.setCullFace(CullFace.NONE);
-        beam.setDrawMode(DrawMode.FILL);      // max visibility
-        beam.setMouseTransparent(true);       // never block picking
+        beam.setDrawMode(DrawMode.FILL);
+        beam.setMouseTransparent(true);
 
-        // Keep diffuse color in sync with a property so we can animate it
-        beamColor.addListener((obs, ov, nv) -> {
-            if (nv != null) {
-                beamMat.setDiffuseColor(nv);
-                // Optional: specular pop for readability
-                beamMat.setSpecularColor(Color.WHITE);
-                beamMat.setSpecularPower(64);
-            }
-        });
-        beamColor.set(beamMat.getDiffuseColor());
-
-        // Transform used to orient/position the beam
         xform = new Affine();
         beam.getTransforms().add(xform);
 
-        // Debug markers (mouseTransparent so they don't block ray casts)
+        // Procedural material
+        pmat = new ProceduralTetherMaterial();
+        pmat.ensureStaticMaps(radius); // set diffuse/bump once
+        pmat.setBaseColor(color != null ? color : Color.CYAN);
+        pmat.setEmissiveStrength(0.0);
+        beam.setMaterial(pmat.material());
+
+        // Expose a simple “beamColor” property to preserve your existing API;
+        // It routes to pmat.setBaseColor (fast) and does NOT rebuild textures.
+        beamColor.addListener((obs, ov, nv) -> {
+            if (nv != null) {
+                pmat.setBaseColor(nv);
+            }
+        });
+        beamColor.set(color != null ? color : Color.CYAN);
+
+        // Debug markers
         startMarker = new Sphere(radius * 1.8);
-        startMarker.setMaterial(new PhongMaterial(Color.LIMEGREEN));
+        startMarker.setMaterial(new javafx.scene.paint.PhongMaterial(Color.LIMEGREEN));
         startMarker.setCullFace(CullFace.NONE);
         startMarker.setDrawMode(DrawMode.FILL);
         startMarker.setMouseTransparent(true);
 
         endMarker = new Sphere(radius * 2.2);
-        endMarker.setMaterial(new PhongMaterial(Color.RED));
+        endMarker.setMaterial(new javafx.scene.paint.PhongMaterial(Color.RED));
         endMarker.setCullFace(CullFace.NONE);
         endMarker.setDrawMode(DrawMode.FILL);
         endMarker.setMouseTransparent(true);
@@ -159,23 +164,28 @@ public class TetherView extends Group {
         xform.setMxx(right.getX()); xform.setMxy(v.getX()); xform.setMxz(up.getX()); xform.setTx(mid.getX());
         xform.setMyx(right.getY()); xform.setMyy(v.getY()); xform.setMyz(up.getY()); xform.setTy(mid.getY());
         xform.setMzx(right.getZ()); xform.setMzy(v.getZ()); xform.setMzz(up.getZ()); xform.setTz(mid.getZ());
+
+        // Throttle static-map ensure (cheap, but avoid spamming)
+        long now = System.nanoTime();
+        if (Math.abs(len - lastLen) > 1e-5 && (now - lastStaticEnsureNanos) > ENSURE_INTERVAL_NS) {
+            pmat.ensureStaticMaps(radius); // single cache lookup; no painting
+            lastStaticEnsureNanos = now;
+        }
+        lastLen = len;
     }
 
     // ---------------------------
     // Visual polish conveniences
     // ---------------------------
 
-    /** Immediately set the beam’s diffuse color. */
+    /** Immediately set the beam’s "base" color (routes to procedural material tint). */
     public void setBeamColor(Color c) {
         if (c == null) return;
         stopColorFade();
         beamColor.set(c);
     }
 
-    /**
-     * Smoothly fade the beam’s color to 'target' over 'dur'.
-     * If another fade is in progress it will be replaced.
-     */
+    /** Smooth color fade (updates tint; no texture rebuild). */
     public void fadeBeamColor(Color target, Duration dur) {
         if (target == null) return;
         if (dur == null || dur.lessThanOrEqualTo(Duration.ZERO)) {
@@ -184,39 +194,15 @@ public class TetherView extends Group {
         }
         stopColorFade();
 
-        // Animate color by interpolating channels manually
         Color from = beamColor.get();
-        colorFadeTL = new Timeline(
-            new KeyFrame(Duration.ZERO,
-                new KeyValue(new javafx.beans.property.SimpleDoubleProperty(0), 0, Interpolator.LINEAR)
-            ),
-            new KeyFrame(dur,
-                new KeyValue(new javafx.beans.property.SimpleDoubleProperty(1), 1, Interpolator.LINEAR)
-            )
-        );
-        // Use a pulse-driven onFinished + on every pulse update via a runnable KeyFrame
-        colorFadeTL.getKeyFrames().clear();
         final int steps = Math.max(1, (int)Math.ceil(dur.toMillis() / 16.0)); // ~60fps
-        for (int i = 0; i <= steps; i++) {
-            double t = (double)i / steps;
-            Color c = lerpColor(from, target, t);
-            colorFadeTL.getKeyFrames().add(new KeyFrame(Duration.millis(dur.toMillis() * t),
-                new KeyValue(beam.opacityProperty(), beam.getOpacity(), Interpolator.DISCRETE) // dummy kv to schedule frame
-            ));
-            final Color frameColor = c;
-            colorFadeTL.currentTimeProperty().addListener((obs, ov, nv) -> {
-                // This listener fires many times; keep it lightweight
-                // To avoid redundant sets, only update when the timeline's current time equals this keyframe time.
-            });
-        }
-        // Simpler approach: use a single timeline with a custom onFinished + AnimationTimer-like pulse via KeyFrames
-        // but to keep it robust and simple, just use another small Timeline that calls set every 16ms:
         Timeline painter = new Timeline();
         painter.setCycleCount(steps + 1);
         for (int i = 0; i <= steps; i++) {
             double t = (double)i / steps;
             Color c = lerpColor(from, target, t);
-            painter.getKeyFrames().add(new KeyFrame(Duration.millis(dur.toMillis() * t), e -> beamColor.set(c)));
+            painter.getKeyFrames().add(new KeyFrame(Duration.millis(dur.toMillis() * t),
+                    e -> beamColor.set(c)));
         }
         colorFadeTL = painter;
         colorFadeTL.play();
@@ -251,6 +237,29 @@ public class TetherView extends Group {
             )
         );
         thicknessTL.play();
+    }
+
+    // ---- Optional helpers for emissive (fast; cached images) ----
+
+    /** Set the emissive tint used for lock visuals (cached per color bucket). */
+    public void setLockTint(Color c) {
+        pmat.setLockTint(c);
+        // Keep current strength; just ensure correct emissive map chosen
+        pmat.setEmissiveStrength(currentEmissiveStrength);
+    }
+
+    private double currentEmissiveStrength = 0.0;
+
+    /** Drive emissive intensity (0..1). Uses discrete cached steps internally. */
+    public void setEmission(double strength01) {
+        currentEmissiveStrength = Math.max(0, Math.min(1, strength01));
+        pmat.setEmissiveStrength(currentEmissiveStrength);
+    }
+
+    /** Convenience for “locked” look on/off. */
+    public void setLockedVisual(boolean locked) {
+        this.lockedVisual = locked;
+        setEmission(locked ? 0.45 : 0.0);
     }
 
     // --- utility ---

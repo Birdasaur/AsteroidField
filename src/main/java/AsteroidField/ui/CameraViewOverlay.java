@@ -3,14 +3,19 @@ package AsteroidField.ui;
 import javafx.geometry.Insets;
 import javafx.scene.SubScene;
 import javafx.scene.control.TitledPane;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.Region;
+import javafx.scene.paint.Color;
 
 public class CameraViewOverlay extends TitledPane {
     private final CameraViewLite camView;
-    private final BorderPane contentPane = new BorderPane();
+    private final BorderPane contentPane;
 
     public CameraViewOverlay(SubScene subScene, String title, double prefW, double prefH) {
+        contentPane = new BorderPane();
         setText(title != null ? title : "MiniCam");
         setCollapsible(true);
         setExpanded(true);
@@ -29,6 +34,8 @@ public class CameraViewOverlay extends TitledPane {
         setPrefSize(prefW, prefH + 28); // ~title bar; tweak to your CSS
         setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        setBackground(new Background(
+            new BackgroundFill(Color.TRANSPARENT, CornerRadii.EMPTY, Insets.EMPTY)));
     }
 
     public void start() { camView.startViewing(); }

@@ -9,7 +9,9 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -69,6 +71,10 @@ public class App extends Application {
         StackPane.setMargin(topOverlay, hudPad);
         StackPane.setMargin(sideOverlay, hudPad);
         root.setCenter(centerStack);
+        
+        topOverlay.setBackground(Background.EMPTY);
+        sideOverlay.setBackground(new Background(
+            new BackgroundFill(Color.TRANSPARENT, CornerRadii.EMPTY, Insets.EMPTY)));
         
         topOverlay.getCameraView().setSnapshotOnlyNodes(fieldView.getDebugCraft());
         sideOverlay.getCameraView().setSnapshotOnlyNodes(fieldView.getDebugCraft());
