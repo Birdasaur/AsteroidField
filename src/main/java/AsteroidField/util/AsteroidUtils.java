@@ -5,6 +5,7 @@ import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import javafx.beans.binding.Bindings;
+import javafx.collections.ListChangeListener;
 import javafx.geometry.Point3D;
 import javafx.scene.Node;
 import javafx.scene.paint.Color;
@@ -13,6 +14,7 @@ import javafx.scene.shape.CullFace;
 import javafx.scene.shape.DrawMode;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
+import javafx.scene.transform.Transform;
 
 /** Grab-bag helper: pose binding, wireframe overlays, and asteroid creation. */
 public final class AsteroidUtils {
@@ -32,6 +34,24 @@ public final class AsteroidUtils {
                 .build();
     }    
     // ---------- Pose binding ----------
+/** Bind dst node's pose to src node (transforms list + simple pose properties). */
+public static void bindNodePose(Node dst, Node src) {
+    // keep full transforms list in sync
+    dst.getTransforms().setAll(src.getTransforms());
+    src.getTransforms().addListener((ListChangeListener<? super Transform>) c ->
+        dst.getTransforms().setAll(src.getTransforms())
+    );
+    // bind simple pose props
+    dst.rotateProperty().bind(src.rotateProperty());
+    dst.rotationAxisProperty().bind(src.rotationAxisProperty());
+    dst.translateXProperty().bind(src.translateXProperty());
+    dst.translateYProperty().bind(src.translateYProperty());
+    dst.translateZProperty().bind(src.translateZProperty());
+    // (bind scale too if your rig uses it)
+    // dst.scaleXProperty().bind(src.scaleXProperty());
+    // dst.scaleYProperty().bind(src.scaleYProperty());
+    // dst.scaleZProperty().bind(src.scaleZProperty());
+}
 
     /** Bind all pose properties so target fully mirrors source (translate/rotate/scale + transforms list). */
     public static void bindPose(Node target, Node source) {

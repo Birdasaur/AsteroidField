@@ -21,8 +21,8 @@ public class TrackBallController {
     private double anchorX, anchorY, anchorYaw, anchorPitch;
     private double yaw = 0, pitch = 0;
 
-    private Rotate rotateYaw = new Rotate(0, Rotate.Y_AXIS);
-    private Rotate rotatePitch = new Rotate(0, Rotate.X_AXIS);
+    private final Rotate rotateYaw   = new Rotate(0, Rotate.Y_AXIS);
+    private final Rotate rotatePitch = new Rotate(0, Rotate.X_AXIS);
 
     private boolean enabled = false;
 
@@ -47,11 +47,16 @@ public class TrackBallController {
         }
     }
 
+    /** New: query current enabled state */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
     private void onMouseClicked(MouseEvent event) {
         if (event.isControlDown() && event.getButton() == MouseButton.PRIMARY) {
             Node picked = event.getPickResult().getIntersectedNode();
             if (picked instanceof MeshView && asteroidViews.contains(picked)) {
-                setSelected((MeshView)picked);
+                setSelected((MeshView) picked);
             }
         }
     }
@@ -78,9 +83,9 @@ public class TrackBallController {
         rotatePitch.setAngle(pitch);
 
         // Ensure the two rotates are the only transforms on the mesh (order: Y then X)
-        if (selected.getTransforms().size() < 2 ||
-                selected.getTransforms().get(0) != rotateYaw ||
-                selected.getTransforms().get(1) != rotatePitch) {
+        if (selected.getTransforms().size() < 2
+                || selected.getTransforms().get(0) != rotateYaw
+                || selected.getTransforms().get(1) != rotatePitch) {
             selected.getTransforms().clear();
             selected.getTransforms().addAll(rotateYaw, rotatePitch);
         }
