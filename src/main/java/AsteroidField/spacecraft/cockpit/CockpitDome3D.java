@@ -1,4 +1,4 @@
-package AsteroidField.spacecraft;
+package AsteroidField.spacecraft.cockpit;
 
 import javafx.geometry.Point3D;
 import javafx.scene.DepthTest;
@@ -8,7 +8,6 @@ import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.Sphere;
-import javafx.scene.transform.Rotate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +54,48 @@ public class CockpitDome3D extends Group {
     }
 
     // ================= public API =================
+    // --- Compat surface to resemble BaseCockpit ---
+
+    /** Treat the bar frame as the 'frame group' (for shared helpers). */
+    public Group getFrameGroup() {
+        return frame;
+    }
+
+    /** Dome has no glass mesh; return empty for API parity. */
+    public java.util.Optional<javafx.scene.shape.MeshView> getGlass() {
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Map a frame material onto this dome’s bar material:
+     * - Uses material's diffuse RGB (keeps current opacity).
+     * - Copies specular color if provided.
+     */
+    public void setFrameMaterial(PhongMaterial mat) {
+        if (mat == null) return;
+
+        // Preserve current opacity, replace RGB from mat's diffuse
+        Color target = mat.getDiffuseColor() != null ? mat.getDiffuseColor() : barMat.getDiffuseColor();
+        Color current = barMat.getDiffuseColor();
+        barMat.setDiffuseColor(new Color(
+                target.getRed(), target.getGreen(), target.getBlue(),
+                current.getOpacity()
+        ));
+
+        // Optional: mirror specular
+        Color spec = mat.getSpecularColor() != null ? mat.getSpecularColor() : Color.WHITE;
+        barMat.setSpecularColor(spec);
+    }
+
+    /** No-op: this implementation has no glass mesh, method here for parity. */
+    public void setGlassMaterial(PhongMaterial mat) {
+        // intentionally empty
+    }
+
+    /** No-op: this implementation has no glass mesh, method here for parity. */
+    public void setGlassVisible(boolean visible) {
+        // intentionally empty
+    }
 
     public void rebuild(double newRadius, double newBarSize) {
         this.radius  = Math.max(1e-6, newRadius);
