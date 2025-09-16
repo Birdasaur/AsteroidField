@@ -6,6 +6,7 @@ import AsteroidField.spacecraft.cockpit.TetrahedronCockpit;
 import AsteroidField.spacecraft.cockpit.OctahedronCockpit;
 import AsteroidField.spacecraft.cockpit.IcosahedronCockpit;
 import AsteroidField.spacecraft.cockpit.IcosaDomeCockpit;
+import AsteroidField.spacecraft.cockpit.IcosaWrapCockpit;
 
 import javafx.application.Application;
 import javafx.scene.*;
@@ -29,11 +30,19 @@ public class TestCockpitApp extends Application {
         TETRA("Tetrahedron (Bars+Glass)"),
         OCTA("Octahedron (Bars+Glass)"),
         ICOSAHEDRON("Icosahedron (Bars+Glass)"),
-        ICOSA_DOME("Icosa Dome (Hemisphere)");
+        ICOSA_DOME("Icosa Dome (Hemisphere)"),
+        ICOSA_WRAP("Icosa Wrap (3/4 sphere)");
 
         final String label;
-        CockpitOption(String label) { this.label = label; }
-        @Override public String toString() { return label; }
+
+        CockpitOption(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
     }
 
     @Override
@@ -77,14 +86,12 @@ public class TestCockpitApp extends Application {
 
         // SubScene (route input to this, not to Scene)
         SubScene subScene = new SubScene(root3D, 1280, 800, true, SceneAntialiasing.BALANCED);
-        subScene.setFill(Color.ALICEBLUE);
+        subScene.setFill(Color.BLACK);
         subScene.setCamera(cam);
 
         // =======================
         // UI CONTROLS (ToolBar)
         // =======================
-
-        // Selection
         Label pickerLbl = new Label(" Cockpit: ");
         ComboBox<CockpitOption> cockpitPicker = new ComboBox<>();
         cockpitPicker.getItems().addAll(
@@ -92,7 +99,8 @@ public class TestCockpitApp extends Application {
                 CockpitOption.TETRA,
                 CockpitOption.OCTA,
                 CockpitOption.ICOSAHEDRON,
-                CockpitOption.ICOSA_DOME
+                CockpitOption.ICOSA_DOME,
+                CockpitOption.ICOSA_WRAP 
         );
         cockpitPicker.getSelectionModel().select(CockpitOption.ORIGINAL_DOME);
 
@@ -151,7 +159,13 @@ public class TestCockpitApp extends Application {
         Slider aSlider = new Slider(0.1, 1.0, 1.0);
         aSlider.setPrefWidth(140);
 
-        ColorPicker colorPicker = new ColorPicker(Color.CYAN);
+        ColorPicker colorPicker = new ColorPicker(Color.LIGHTBLUE);
+
+        CheckBox frameOnly = new CheckBox("Frame only");
+        frameOnly.setSelected(false);
+
+        Label glassLbl = new Label(" Glass:");
+        ColorPicker glassColorPicker = new ColorPicker(Color.color(0.5, 0.8, 1.0)); // subtle aqua
 
         // Front bias (windshield feel) – dome-only
         Label fbLabel = new Label(" Front Bias: 2.0× ");
@@ -194,6 +208,8 @@ public class TestCockpitApp extends Application {
                 new Separator(),
                 aLabel, aSlider, new Label(" Color:"), colorPicker,
                 new Separator(),
+                frameOnly, glassLbl, glassColorPicker,
+                new Separator(),
                 fbLabel, fbSlider, sigmaLabel, sigmaSlider,
                 new Separator(),
                 aPillars, azLabel, azSlider, topLabel, topSlider, botLabel, botSlider, amLabel, amSlider,
@@ -220,30 +236,32 @@ public class TestCockpitApp extends Application {
 
         // Quick UI shortcuts
         scene.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.SPACE) markers.setSelected(!markers.isSelected());
-            if (e.getCode() == KeyCode.B)     baseRing.setSelected(!baseRing.isSelected());
+            if (e.getCode() == KeyCode.SPACE) {
+                markers.setSelected(!markers.isSelected());
+            }
+            if (e.getCode() == KeyCode.B) {
+                baseRing.setSelected(!baseRing.isSelected());
+            }
         });
 
         // -------------------------
         // State + Wiring
         // -------------------------
-
         // central state mirrored by sliders
         final double[] stateRadius = {200};
-        final double[] stateThick  = {8.0};
-        final Color[]  stateColor  = {Color.CYAN};
-        final double[] stateAlpha  = {1.0};
+        final double[] stateThick = {8.0};
+        final Color[] stateColor = {Color.LIGHTBLUE};
+        final double[] stateAlpha = {1.0};
 
         // build initial cockpit
         Runnable rebuildSelectedCockpit = () -> {
             cockpitHolder.getChildren().clear();
             Group newNode = createCockpitNode(
-                    cockpitPicker.getValue(),
-                    stateRadius[0], stateThick[0],
-                    /*addGlass*/ true
-            );
+                    cockpitPicker.getValue(), stateRadius[0], stateThick[0], true);
             cockpitHolder.getChildren().add(newNode);
+            // reapply appearance
             applyColorAndOpacity(newNode, stateColor[0], stateAlpha[0]);
+            applyGlassSettings(newNode, frameOnly, glassColorPicker);
         };
         rebuildSelectedCockpit.run();
 
@@ -253,6 +271,8 @@ public class TestCockpitApp extends Application {
         // enable/disable dome-only controls based on selection
         Runnable refreshControlEnablement = () -> {
             boolean isDome = cockpitPicker.getValue() == CockpitOption.ORIGINAL_DOME;
+
+            // dome-only (unchanged)
             markers.setDisable(!isDome);
             baseRing.setDisable(!isDome);
             fullWrap.setDisable(!isDome);
@@ -266,7 +286,12 @@ public class TestCockpitApp extends Application {
             topSlider.setDisable(!isDome);
             botSlider.setDisable(!isDome);
             amSlider.setDisable(!isDome);
+            // glass-related (only useful for BaseCockpit variants)
+            frameOnly.setDisable(isDome);
+            glassLbl.setDisable(isDome);
+            glassColorPicker.setDisable(isDome);
         };
+
         refreshControlEnablement.run();
 
         // selection change
@@ -307,88 +332,136 @@ public class TestCockpitApp extends Application {
             stateColor[0] = colorPicker.getValue();
             applyColorAndOpacity((Group) cockpitHolder.getChildren().get(0), stateColor[0], stateAlpha[0]);
         });
+        frameOnly.selectedProperty().addListener((o, was, now) -> {
+            Group g = (Group) cockpitHolder.getChildren().get(0);
+            if (g instanceof BaseCockpit bc) {
+                bc.setGlassVisible(!now);
+            }
+        });
+
+        glassColorPicker.setOnAction(e -> {
+            Group g = (Group) cockpitHolder.getChildren().get(0);
+            if (g instanceof BaseCockpit baseCockpit) {
+                Color c = glassColorPicker.getValue();
+                baseCockpit.setGlassMaterial(new PhongMaterial(Color.color(
+                        c.getRed(), c.getGreen(), c.getBlue(), 0.18 // keep it translucent
+                )));
+            }
+        });
 
         // dome-only listeners (guarded by instanceof)
         markers.selectedProperty().addListener((o, was, is) -> {
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setShowMarkers(is);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setShowMarkers(is);
+            }
         });
         baseRing.selectedProperty().addListener((o, was, is) -> {
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setIncludeBaseRing(is);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setIncludeBaseRing(is);
+            }
         });
         fullWrap.selectedProperty().addListener((o, was, is) -> {
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setFull360(is);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setFull360(is);
+            }
         });
 
         mSlider.valueProperty().addListener((o, ov, nv) -> {
             int m = nv.intValue();
             mLabel.setText(" Meridians: " + m + " ");
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setMeridians(m);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setMeridians(m);
+            }
         });
         luSlider.valueProperty().addListener((o, ov, nv) -> {
             int r = nv.intValue();
             luLabel.setText(" Upper Rings: " + r + " ");
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setLatitudeRings(r);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setLatitudeRings(r);
+            }
         });
         ldSlider.valueProperty().addListener((o, ov, nv) -> {
             int r = nv.intValue();
             ldLabel.setText(" Lower Rings: " + r + " ");
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setLatitudeRingsLower(r);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setLatitudeRingsLower(r);
+            }
         });
 
         fbSlider.valueProperty().addListener((o, ov, nv) -> {
             fbLabel.setText(String.format(" Front Bias: %.1f× ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setFrontBias(nv.doubleValue(), sigmaSlider.getValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setFrontBias(nv.doubleValue(), sigmaSlider.getValue());
+            }
         });
         sigmaSlider.valueProperty().addListener((o, ov, nv) -> {
             sigmaLabel.setText(String.format(" Width: %.0f° ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setFrontBias(fbSlider.getValue(), nv.doubleValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setFrontBias(fbSlider.getValue(), nv.doubleValue());
+            }
         });
 
         aPillars.selectedProperty().addListener((o, was, is) -> {
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g).setIncludeAPillars(is);
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g).setIncludeAPillars(is);
+            }
         });
         azSlider.valueProperty().addListener((o, ov, nv) -> {
             azLabel.setText(String.format(" Az: %.0f° ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g)
-                    .setAPillarParams(nv.doubleValue(), topSlider.getValue(), botSlider.getValue(), amSlider.getValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g)
+                        .setAPillarParams(nv.doubleValue(), topSlider.getValue(), botSlider.getValue(), amSlider.getValue());
+            }
         });
         topSlider.valueProperty().addListener((o, ov, nv) -> {
             topLabel.setText(String.format(" Topθ: %.0f° ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g)
-                    .setAPillarParams(azSlider.getValue(), nv.doubleValue(), botSlider.getValue(), amSlider.getValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g)
+                        .setAPillarParams(azSlider.getValue(), nv.doubleValue(), botSlider.getValue(), amSlider.getValue());
+            }
         });
         botSlider.valueProperty().addListener((o, ov, nv) -> {
             botLabel.setText(String.format(" Botθ: %.0f° ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g)
-                    .setAPillarParams(azSlider.getValue(), topSlider.getValue(), nv.doubleValue(), amSlider.getValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g)
+                        .setAPillarParams(azSlider.getValue(), topSlider.getValue(), nv.doubleValue(), amSlider.getValue());
+            }
         });
         amSlider.valueProperty().addListener((o, ov, nv) -> {
             amLabel.setText(String.format(" Pillar×: %.1f ", nv.doubleValue()));
             Group g = (Group) cockpitHolder.getChildren().get(0);
-            if (g instanceof CockpitDome3D) ((CockpitDome3D) g)
-                    .setAPillarParams(azSlider.getValue(), topSlider.getValue(), botSlider.getValue(), nv.doubleValue());
+            if (g instanceof CockpitDome3D) {
+                ((CockpitDome3D) g)
+                        .setAPillarParams(azSlider.getValue(), topSlider.getValue(), botSlider.getValue(), nv.doubleValue());
+            }
         });
     }
 
     // Factory for cockpit nodes
     private Group createCockpitNode(CockpitOption opt, double radius, double thickness, boolean addGlass) {
         switch (opt) {
-            case TETRA:         return new TetrahedronCockpit(radius, thickness, addGlass);
-            case OCTA:          return new OctahedronCockpit(radius, thickness, addGlass);
-            case ICOSAHEDRON:   return new IcosahedronCockpit(radius, thickness, addGlass);
-            case ICOSA_DOME:    return new IcosaDomeCockpit(radius, thickness, addGlass);
+            case TETRA:
+                return new TetrahedronCockpit(radius, thickness, addGlass);
+            case OCTA:
+                return new OctahedronCockpit(radius, thickness, addGlass);
+            case ICOSAHEDRON:
+                return new IcosahedronCockpit(radius, thickness, addGlass);
+            case ICOSA_DOME:
+                return new IcosaDomeCockpit(radius, thickness, addGlass);
+            case ICOSA_WRAP:
+                return new IcosaWrapCockpit(radius, thickness, addGlass); // default 50% wrap-back
             case ORIGINAL_DOME:
             default: {
                 CockpitDome3D dome = new CockpitDome3D();
@@ -410,20 +483,27 @@ public class TestCockpitApp extends Application {
 
     // Apply color & opacity to both the dome and BaseCockpit variants
     private void applyColorAndOpacity(Group node, Color color, double opacity) {
-        if (node instanceof CockpitDome3D) {
-            CockpitDome3D dome = (CockpitDome3D) node;
+        if (node instanceof CockpitDome3D dome) {
             dome.setBarColor(color);
             dome.setBarOpacity(opacity);
             return;
         }
-        if (node instanceof BaseCockpit) {
-            BaseCockpit base = (BaseCockpit) node;
+        if (node instanceof BaseCockpit base) {
             base.setFrameMaterial(new PhongMaterial(Color.color(
                     color.getRed(), color.getGreen(), color.getBlue(), 1.0
             )));
             base.getFrameGroup().setOpacity(opacity);
-            // Optionally tint glass lightly:
-            // base.setGlassMaterial(new PhongMaterial(Color.color(color.getRed(), color.getGreen(), color.getBlue(), 0.15)));
+        }
+    }
+
+    // Reapply the frame-only toggle and glass tint to BaseCockpit variants
+    private void applyGlassSettings(Group node, CheckBox frameOnly, ColorPicker glassColorPicker) {
+        if (node instanceof BaseCockpit bc) {
+            bc.setGlassVisible(!frameOnly.isSelected());
+            Color gc = glassColorPicker.getValue();
+            bc.setGlassMaterial(new PhongMaterial(Color.color(
+                    gc.getRed(), gc.getGreen(), gc.getBlue(), 0.18 // translucent
+            )));
         }
     }
 

@@ -15,7 +15,7 @@ public final class IcosahedronCockpit extends BaseCockpit {
         buildFromPolyhedron(icosahedron(radius), null);
     }
 
-    static BaseCockpit.Polyhedron icosahedron(double r) {
+    public static BaseCockpit.Polyhedron icosahedron(double r) {
         double t = (1.0 + Math.sqrt(5.0)) / 2.0;
         List<Point3D> raw = Arrays.asList(
                 new Point3D(-1,  t,  0), new Point3D( 1,  t,  0),
@@ -36,7 +36,7 @@ public final class IcosahedronCockpit extends BaseCockpit {
         return new BaseCockpit.Polyhedron(v, f);
     }
 
-    static Point3D normalize(Point3D p) {
+    public static Point3D normalize(Point3D p) {
         double m = Math.sqrt(p.getX()*p.getX() + p.getY()*p.getY() + p.getZ()*p.getZ());
         return new Point3D(p.getX()/m, p.getY()/m, p.getZ()/m);
     }
