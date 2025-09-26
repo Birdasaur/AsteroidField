@@ -9,7 +9,7 @@ import javafx.scene.shape.TriangleMesh;
 public class IcosphereMesh extends TriangleMesh {
     protected final float[] verts;
     protected final List<float[]> vertsList;
-    protected final int[] faces;
+    protected int[] faces;
     protected final List<int[]> facesList;
     public final double radius;
     public final int subdivisions;
