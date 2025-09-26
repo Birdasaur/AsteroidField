@@ -1,36 +1,46 @@
 package AsteroidField.asteroids.parameters;
 
 /**
- * Icosphere-line, deform-only "Home Base" parameters:
- * - 1..N mouth directions (amphitheater-style craters)
- * - elliptical mouth aperture (major/minor)
- * - interior cavity ratio (fraction of outer radius)
- * - optional rim lift for a visible lip at the crater boundary
+ * Icosphere-line, deform-only "Home Base" parameters with rounded crater profile
+ * and local Taubin smoothing controls.
  */
 public class HomeBaseAsteroidParameters extends AsteroidParameters {
 
     // Mouth (entrance) controls
-    private final int mouthCount;             // number of amphitheater craters
-    private final double mouthMajorDeg;       // major half-angle in degrees (ellipse axis U)
-    private final double mouthMinorDeg;       // minor half-angle in degrees (ellipse axis V)
-    private final double mouthJitter;         // 0..0.5 angular jitter for mouth placement
+    private final int mouthCount;             // 1..N amphitheater craters
+    private final double mouthMajorDeg;       // major half-angle (deg)
+    private final double mouthMinorDeg;       // minor half-angle (deg)
+    private final double mouthJitter;         // 0..0.5
 
-    // Cavity controls
-    private final double cavityRadiusRatio;   // target inner radius near crater axis (0.1..0.9)
-    private final double cavityBlendScale;    // scales the mouth half-angles for cavity blending (1..4)
-    private final double rimLift;             // outward lip as fraction of radius (0..0.2)
-    private final double rimSharpness;        // 0.5..3.0 higher = tighter lip ring
+    // Cavity shape controls
+    private final double cavityRadiusRatio;   // 0.1..0.9 of outer radius
+    private final double cavityBlendScale;    // 1..4 (widens cavity influence)
+    private final double rimLift;             // 0..0.2 (outward lip)
+    private final double rimSharpness;        // 0.5..3.0
+
+    // Rounded crater profile + smoothing knobs
+    private final double plateau;             // 0..0.8 (flat bottom width near axis)
+    private final double softnessExp;         // 0.5..3.0 (raised-cosine softness)
+    private final int smoothIterations;       // 0..10
+    private final double smoothLambda;        // 0..1 (Taubin λ)
+    private final double smoothMu;            // -1..0 (Taubin μ)
 
     public static class Builder extends AsteroidParameters.Builder<Builder> {
         private int mouthCount = 1;
         private double mouthMajorDeg = 90.0;
         private double mouthMinorDeg = 60.0;
-        private double mouthJitter = 0.15;
+        private double mouthJitter   = 0.15;
 
         private double cavityRadiusRatio = 0.45;
-        private double cavityBlendScale = 2.2;
-        private double rimLift = 0.06;
+        private double cavityBlendScale  = 2.2;
+        private double rimLift      = 0.06;
         private double rimSharpness = 1.1;
+
+        private double plateau = 0.35;
+        private double softnessExp = 1.0;
+        private int smoothIterations = 2;
+        private double smoothLambda = 0.50;
+        private double smoothMu     = -0.53;
 
         public Builder mouthCount(int n) { this.mouthCount = n; return this; }
         public Builder mouthMajorDeg(double d) { this.mouthMajorDeg = d; return this; }
@@ -41,6 +51,12 @@ public class HomeBaseAsteroidParameters extends AsteroidParameters {
         public Builder cavityBlendScale(double s) { this.cavityBlendScale = s; return this; }
         public Builder rimLift(double r) { this.rimLift = r; return this; }
         public Builder rimSharpness(double k) { this.rimSharpness = k; return this; }
+
+        public Builder plateau(double p) { this.plateau = p; return this; }
+        public Builder softnessExp(double e) { this.softnessExp = e; return this; }
+        public Builder smoothIterations(int iters) { this.smoothIterations = iters; return this; }
+        public Builder smoothLambda(double l) { this.smoothLambda = l; return this; }
+        public Builder smoothMu(double m) { this.smoothMu = m; return this; }
 
         @Override public HomeBaseAsteroidParameters build() { return new HomeBaseAsteroidParameters(this); }
         @Override protected Builder self() { return this; }
@@ -56,6 +72,11 @@ public class HomeBaseAsteroidParameters extends AsteroidParameters {
         this.cavityBlendScale  = clamp(b.cavityBlendScale, 1.0, 4.0);
         this.rimLift      = clamp(b.rimLift, 0.0, 0.2);
         this.rimSharpness = clamp(b.rimSharpness, 0.5, 3.0);
+        this.plateau      = clamp(b.plateau, 0.0, 0.8);
+        this.softnessExp  = clamp(b.softnessExp, 0.5, 3.0);
+        this.smoothIterations = Math.max(0, Math.min(10, b.smoothIterations));
+        this.smoothLambda = clamp(b.smoothLambda, 0.0, 1.0);
+        this.smoothMu     = clamp(b.smoothMu, -1.0, 0.0);
     }
 
     private static double clamp(double v, double a, double b) { return Math.max(a, Math.min(b, v)); }
@@ -68,6 +89,11 @@ public class HomeBaseAsteroidParameters extends AsteroidParameters {
     public double getCavityBlendScale() { return cavityBlendScale; }
     public double getRimLift() { return rimLift; }
     public double getRimSharpness() { return rimSharpness; }
+    public double getPlateau() { return plateau; }
+    public double getSoftnessExp() { return softnessExp; }
+    public int getSmoothIterations() { return smoothIterations; }
+    public double getSmoothLambda() { return smoothLambda; }
+    public double getSmoothMu() { return smoothMu; }
 
     @Override
     public HomeBaseAsteroidParameters.Builder toBuilder() {
@@ -84,6 +110,11 @@ public class HomeBaseAsteroidParameters extends AsteroidParameters {
             .cavityRadiusRatio(getCavityRadiusRatio())
             .cavityBlendScale(getCavityBlendScale())
             .rimLift(getRimLift())
-            .rimSharpness(getRimSharpness());
+            .rimSharpness(getRimSharpness())
+            .plateau(getPlateau())
+            .softnessExp(getSoftnessExp())
+            .smoothIterations(getSmoothIterations())
+            .smoothLambda(getSmoothLambda())
+            .smoothMu(getSmoothMu());
     }
 }

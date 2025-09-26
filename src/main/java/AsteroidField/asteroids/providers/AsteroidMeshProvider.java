@@ -54,6 +54,7 @@ public interface AsteroidMeshProvider {
         Map<String, AsteroidMeshProvider> map = new LinkedHashMap<>();
         map.put("Classic Rocky", new AsteroidMeshProvider.Default());
         map.put("Home Base", new HomeBaseAsteroidMeshProvider());
+        map.put("Hollow Base", new HollowBaseAsteroidMeshProvider());
         map.put("Crystalline", new CrystallineAsteroidMeshProvider());
         map.put("Cubic", new CubicAsteroidMeshProvider());
         map.put("Spiky", new SpikyAsteroidMeshProvider());

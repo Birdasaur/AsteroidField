@@ -1,25 +1,39 @@
 package AsteroidField.asteroids.providers;
 
 import AsteroidField.asteroids.AsteroidFamilyUI;
+import AsteroidField.asteroids.geometry.HomeBaseMesh;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.parameters.HomeBaseAsteroidParameters;
-import AsteroidField.asteroids.geometry.HomeBaseMesh;
-import javafx.scene.Node;
-import javafx.scene.layout.VBox;
-import javafx.scene.shape.TriangleMesh;
 import java.util.function.Consumer;
 import javafx.geometry.Insets;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
-import javafx.scene.control.Button;
+import javafx.scene.layout.VBox;
+import javafx.scene.shape.TriangleMesh;
 
 public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, AsteroidFamilyUI {
 
     private Spinner<Integer> mouthCountSpinner;
-    private Slider mouthMajorDeg, mouthMinorDeg, mouthJitter;
-    private Slider cavityRadiusRatio, cavityBlendScale, rimLift, rimSharpness;
+    private Slider mouthMajorDeg;
+    private Slider mouthMinorDeg;
+    private Slider mouthJitter;
+
+    private Slider cavityRadiusRatio;
+    private Slider cavityBlendScale;
+    private Slider rimLift;
+    private Slider rimSharpness;
+
+    // Smoothing/profile
+    private Slider plateau;
+    private Slider softnessExp;
+    private Spinner<Integer> smoothIterSpinner;
+    private Slider smoothLambda;
+    private Slider smoothMu;
 
     private Consumer<AsteroidParameters> onChangeCallback;
     private HomeBaseAsteroidParameters lastParams = null;
@@ -40,14 +54,20 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
 
         mouthCountSpinner = new Spinner<>();
         mouthCountSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 6, cur.getMouthCount()));
-        mouthMajorDeg = new Slider(20, 160, cur.getMouthMajorDeg());
-        mouthMinorDeg = new Slider(20, 160, cur.getMouthMinorDeg());
+        mouthMajorDeg = new Slider(20.0, 160.0, cur.getMouthMajorDeg());
+        mouthMinorDeg = new Slider(20.0, 160.0, cur.getMouthMinorDeg());
         mouthJitter   = new Slider(0.0, 0.5,  cur.getMouthJitter());
 
         cavityRadiusRatio = new Slider(0.1, 0.9, cur.getCavityRadiusRatio());
         cavityBlendScale  = new Slider(1.0, 4.0, cur.getCavityBlendScale());
         rimLift           = new Slider(0.0, 0.2, cur.getRimLift());
         rimSharpness      = new Slider(0.5, 3.0, cur.getRimSharpness());
+
+        plateau           = new Slider(0.0, 0.8, cur.getPlateau());
+        softnessExp       = new Slider(0.5, 3.0, cur.getSoftnessExp());
+        smoothIterSpinner = new Spinner<>(0, 10, cur.getSmoothIterations());
+        smoothLambda      = new Slider(0.0, 1.0, cur.getSmoothLambda());
+        smoothMu          = new Slider(-1.0, 0.0, cur.getSmoothMu());
 
         mouthMajorDeg.setShowTickLabels(true);
         mouthMinorDeg.setShowTickLabels(true);
@@ -56,20 +76,29 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
         cavityBlendScale.setShowTickLabels(true);
         rimLift.setShowTickLabels(true);
         rimSharpness.setShowTickLabels(true);
+        plateau.setShowTickLabels(true);
+        softnessExp.setShowTickLabels(true);
+        smoothLambda.setShowTickLabels(true);
+        smoothMu.setShowTickLabels(true);
 
         Runnable update = () -> {
             lastParams = buildParamsFromControls(lastParams);
             if (onChangeCallback != null) onChangeCallback.accept(lastParams);
         };
 
-        mouthCountSpinner.valueProperty().addListener((o,ov,nv) -> update.run());
-        mouthMajorDeg.valueProperty().addListener((o,ov,nv) -> update.run());
-        mouthMinorDeg.valueProperty().addListener((o,ov,nv) -> update.run());
-        mouthJitter.valueProperty().addListener((o,ov,nv) -> update.run());
-        cavityRadiusRatio.valueProperty().addListener((o,ov,nv) -> update.run());
-        cavityBlendScale.valueProperty().addListener((o,ov,nv) -> update.run());
-        rimLift.valueProperty().addListener((o,ov,nv) -> update.run());
-        rimSharpness.valueProperty().addListener((o,ov,nv) -> update.run());
+        mouthCountSpinner.valueProperty().addListener((o, ov, nv) -> update.run());
+        mouthMajorDeg.valueProperty().addListener((o, ov, nv) -> update.run());
+        mouthMinorDeg.valueProperty().addListener((o, ov, nv) -> update.run());
+        mouthJitter.valueProperty().addListener((o, ov, nv) -> update.run());
+        cavityRadiusRatio.valueProperty().addListener((o, ov, nv) -> update.run());
+        cavityBlendScale.valueProperty().addListener((o, ov, nv) -> update.run());
+        rimLift.valueProperty().addListener((o, ov, nv) -> update.run());
+        rimSharpness.valueProperty().addListener((o, ov, nv) -> update.run());
+        plateau.valueProperty().addListener((o, ov, nv) -> update.run());
+        softnessExp.valueProperty().addListener((o, ov, nv) -> update.run());
+        smoothIterSpinner.valueProperty().addListener((o, ov, nv) -> update.run());
+        smoothLambda.valueProperty().addListener((o, ov, nv) -> update.run());
+        smoothMu.valueProperty().addListener((o, ov, nv) -> update.run());
 
         Button randomizeBtn = new Button("Randomize Mouth Orientation");
         randomizeBtn.setOnAction(e -> {
@@ -79,7 +108,7 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
         });
 
         VBox controls = new VBox(
-            new Label("Home Base (Deform-Only)"),
+            new Label("Home Base (Deform-Only, Rounded + Smoothing)"),
             new VBox(5, new Label("Mouth Count:"), mouthCountSpinner),
             new VBox(5, new Label("Mouth Major (deg):"), mouthMajorDeg),
             new VBox(5, new Label("Mouth Minor (deg):"), mouthMinorDeg),
@@ -88,6 +117,13 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
             new VBox(5, new Label("Cavity Blend Scale:"), cavityBlendScale),
             new VBox(5, new Label("Rim Lift:"), rimLift),
             new VBox(5, new Label("Rim Sharpness:"), rimSharpness),
+            new Separator(),
+            new VBox(5, new Label("Plateau (flat bottom width):"), plateau),
+            new VBox(5, new Label("Softness (raised-cosine exp):"), softnessExp),
+            new VBox(5, new Label("Smooth Iterations:"), smoothIterSpinner),
+            new VBox(5, new Label("Smooth Lambda (λ):"), smoothLambda),
+            new VBox(5, new Label("Smooth Mu (μ):"), smoothMu),
+            new Separator(),
             randomizeBtn
         );
         controls.setSpacing(8);
@@ -111,10 +147,16 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
                 .cavityBlendScale(cavityBlendScale.getValue())
                 .rimLift(rimLift.getValue())
                 .rimSharpness(rimSharpness.getValue())
+                .plateau(plateau.getValue())
+                .softnessExp(softnessExp.getValue())
+                .smoothIterations(smoothIterSpinner.getValue())
+                .smoothLambda(smoothLambda.getValue())
+                .smoothMu(smoothMu.getValue())
                 .build();
     }
 
-    @Override public void setControlsFromParams(AsteroidParameters params) {
+    @Override
+    public void setControlsFromParams(AsteroidParameters params) {
         if (!(params instanceof HomeBaseAsteroidParameters)) return;
         HomeBaseAsteroidParameters p = (HomeBaseAsteroidParameters) params;
         if (mouthCountSpinner != null) mouthCountSpinner.getValueFactory().setValue(p.getMouthCount());
@@ -125,6 +167,11 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
         if (cavityBlendScale  != null) cavityBlendScale.setValue(p.getCavityBlendScale());
         if (rimLift != null) rimLift.setValue(p.getRimLift());
         if (rimSharpness != null) rimSharpness.setValue(p.getRimSharpness());
+        if (plateau != null) plateau.setValue(p.getPlateau());
+        if (softnessExp != null) softnessExp.setValue(p.getSoftnessExp());
+        if (smoothIterSpinner != null) smoothIterSpinner.getValueFactory().setValue(p.getSmoothIterations());
+        if (smoothLambda != null) smoothLambda.setValue(p.getSmoothLambda());
+        if (smoothMu != null) smoothMu.setValue(p.getSmoothMu());
         lastParams = p;
     }
 
@@ -133,9 +180,11 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
     @Override
     public AsteroidParameters getDefaultParameters() {
         return new HomeBaseAsteroidParameters.Builder()
-                .radius(800).subdivisions(3).deformation(0.12).seed(System.nanoTime()).familyName("Home Base")
-                .mouthCount(1).mouthMajorDeg(90).mouthMinorDeg(60).mouthJitter(0.15)
+                .radius(800.0).subdivisions(3).deformation(0.12).seed(System.nanoTime()).familyName("Home Base")
+                .mouthCount(1).mouthMajorDeg(90.0).mouthMinorDeg(60.0).mouthJitter(0.15)
                 .cavityRadiusRatio(0.45).cavityBlendScale(2.2).rimLift(0.06).rimSharpness(1.1)
+                .plateau(0.35).softnessExp(1.0)
+                .smoothIterations(2).smoothLambda(0.50).smoothMu(-0.53)
                 .build();
     }
 
@@ -147,8 +196,10 @@ public class HomeBaseAsteroidMeshProvider implements AsteroidMeshProvider, Aster
                 .deformation(previous.getDeformation())
                 .seed(System.nanoTime())
                 .familyName("Home Base")
-                .mouthCount(1).mouthMajorDeg(90).mouthMinorDeg(60).mouthJitter(0.15)
+                .mouthCount(1).mouthMajorDeg(90.0).mouthMinorDeg(60.0).mouthJitter(0.15)
                 .cavityRadiusRatio(0.45).cavityBlendScale(2.2).rimLift(0.06).rimSharpness(1.1)
+                .plateau(0.35).softnessExp(1.0)
+                .smoothIterations(2).smoothLambda(0.50).smoothMu(-0.53)
                 .build();
     }
 
