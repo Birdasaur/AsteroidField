@@ -6,6 +6,7 @@ import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import AsteroidField.spacecraft.FancyCraft;
+import AsteroidField.spacecraft.collision.SpacecraftCollisionContributor;
 import AsteroidField.tether.CameraKinematicAdapter;
 import AsteroidField.tether.Tether;
 import AsteroidField.tether.TetherSystem;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -76,6 +78,7 @@ public class AsteroidField3DView extends Pane {
     private ToggleButton fpsLookToggle;
     private Button resetCameraBtn;
     private ComboBox<String> asteroidSelectorBox;
+    private SpacecraftCollisionContributor shipCollisions;
 
     private ThrusterController thrusterController;
     private TrackBallController trackballController;
@@ -153,8 +156,7 @@ public class AsteroidField3DView extends Pane {
         fpsLook.setYawPitch(0, 0); // ensure initial orientation known
 
         // Tethers collide with ALL asteroid meshes
-        java.util.function.Supplier<java.util.List<javafx.scene.Node>> collidables =
-                () -> new ArrayList<>(asteroidViews);
+        Supplier<List<Node>> collidables = () -> new ArrayList<>(asteroidViews);
 
         tetherSystem = new TetherSystem(
                 subScene,
@@ -169,6 +171,8 @@ public class AsteroidField3DView extends Pane {
         for (int i = 0; i < 2; i++) {
             Tether t = tetherSystem.getTether(i);
             if (t != null) {
+                t.setRayFrontFaceOnly(true);
+                t.setAllowAabbFallbackOnMeshMiss(false);
                 t.setStiffness(160);
                 t.setDampingRatio(0.9);
                 t.setMaxForce(900);
@@ -191,20 +195,33 @@ public class AsteroidField3DView extends Pane {
         // If ThrusterController also handles look, keep its look sensitivity low/neutral or disabled.
         thrusterController.setLookSensitivity(0.0);
 
+        // Ship collisions as a physics contributor (runs in the same fixed step as thrusters/tethers)
+        shipCollisions = new SpacecraftCollisionContributor(
+                world,            // world root (same node tethers use as parent3D)
+                cameraCraft,      // your kinematic craft adapter
+                collidables,      // same supplier the tethers use
+                1.25              // craft radius; tune to your world scale
+        );
+        shipCollisions.setFrontFaceOnly(true);   // use true once outer faces are confirmed outward
+        shipCollisions.setMaxIterations(2);
+        shipCollisions.setRestitution(0.05);
+        shipCollisions.setFriction(0.15);
+
+        tetherSystem.addContributor(shipCollisions);        
+        
         // Trackball controller (OFF by default since FPS look is default)
         trackballController = new TrackBallController(subScene, camera, asteroidViews);
         trackballController.setEnabled(false);
 
-FancyCraft fancy = new FancyCraft();
-fancy.setScale(0.8);          // tune to your world scale
-fancy.setVisible(false);      // hidden in main view; shown in mini-cams only
-world.getChildren().add(fancy);
+        FancyCraft fancy = new FancyCraft();
+        fancy.setScale(0.8);          // tune to your world scale
+        fancy.setVisible(false);      // hidden in main view; shown in mini-cams only
+        world.getChildren().add(fancy);
 
-// Bind craft pose to the kinematic rig node (NOT the camera)
-AsteroidUtils.bindNodePose(fancy, getCameraFrameNode());
+        // Bind craft pose to the kinematic rig node (NOT the camera)
+        AsteroidUtils.bindNodePose(fancy, getCameraFrameNode());
 
-this.craftProxy = fancy;
-        
+        this.craftProxy = fancy;
         
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());

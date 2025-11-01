@@ -117,4 +117,28 @@ public class CameraKinematicAdapter implements KinematicCraft, Tether.Spacecraft
         // clear forces
         forceAccum = Point3D.ZERO;
     }
+    /** Set craft world position in the same (parent/world) space the rig uses. */
+    public void setWorldPosition(Point3D p) {
+        if (p == null) return;
+        rig.setTranslateX(p.getX());
+        rig.setTranslateY(p.getY());
+        rig.setTranslateZ(p.getZ());
+    }
+
+    /** Convenience overload. */
+    public void setWorldPosition(double x, double y, double z) {
+        rig.setTranslateX(x);
+        rig.setTranslateY(y);
+        rig.setTranslateZ(z);
+    }
+
+    /** Set craft linear velocity in world (parent) space. */
+    public void setVelocity(Point3D v) {
+        this.velocity = (v != null) ? v : Point3D.ZERO;
+    }  
+    public void setWorldPositionAndStop(Point3D p) {
+        setWorldPosition(p);
+        this.velocity = Point3D.ZERO;
+        this.forceAccum = Point3D.ZERO;
+    }    
 }
