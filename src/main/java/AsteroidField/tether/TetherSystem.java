@@ -27,6 +27,8 @@ public class TetherSystem {
 
     private final Tether[] tethers;
     private boolean enabled = false;
+    // Only gates player tether usage (fire/pull/release). Physics loop stays on.
+    private boolean tetherInputEnabled = false;    
     private final boolean hasKinematic;
 
     // Per-tether local emitter offsets (camera local axes)
@@ -130,19 +132,19 @@ public class TetherSystem {
 
     private void installInputHandlers() {
         subScene.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
-            if (!enabled) return; // firing tethers only when enabled
+            if (!tetherInputEnabled) return; // firing tethers only when enabled
             if (e.getButton() == MouseButton.PRIMARY) fireTether(0, e);
             else if (e.getButton() == MouseButton.SECONDARY) fireTether(1, e);
         });
 
         subScene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-            if (!enabled) return; // pulling/release only when enabled
+            if (!tetherInputEnabled) return; // pulling/release only when enabled
             if (e.getCode() == KeyCode.SHIFT)   { for (Tether t : tethers) t.setPulling(true); }
             if (e.getCode() == KeyCode.CONTROL) { releaseAll(); }
         });
 
         subScene.addEventFilter(KeyEvent.KEY_RELEASED, e -> {
-            if (!enabled) return;
+            if (!tetherInputEnabled) return;
             if (e.getCode() == KeyCode.SHIFT)   { for (Tether t : tethers) t.setPulling(false); }
         });
     }
@@ -184,4 +186,10 @@ public class TetherSystem {
                 .add(upParent.multiply(local.getY()))
                 .add(fwdParent.multiply(local.getZ()));
     }
+    public void setTetherInputEnabled(boolean enabled) {
+        this.tetherInputEnabled = enabled;
+        if (!enabled) releaseAll(); // drop any active lines when disarming
+    }
+
+    public boolean isTetherInputEnabled() { return tetherInputEnabled; }    
 }

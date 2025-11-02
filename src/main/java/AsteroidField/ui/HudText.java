@@ -9,13 +9,13 @@ import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
 
 /** Small HUD banner that shows transient text on game events. */
-public final class HudText extends StackPane {
+public final class HudText extends VBox {
 
     private final Label label = new Label("");
     private SequentialTransition currentAnim;
@@ -31,14 +31,15 @@ public final class HudText extends StackPane {
 
     public HudText() {
         setPickOnBounds(false);
-        setMouseTransparent(true); // let mouse pass through to the 3D view
-        setAlignment(Pos.TOP_LEFT);
-        setPadding(new Insets(10, 10, 10, 10));
+        setMouseTransparent(true);
+        setAlignment(Pos.BOTTOM_LEFT);     // VBox respects this properly
+        setPadding(new Insets(10));
 
         label.setTextFill(Color.WHITE);
         label.setFont(Font.font("Consolas", 16));
         label.setStyle("-fx-font-weight: bold; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.85), 8, 0.5, 0, 0);");
         label.setVisible(false);
+
         getChildren().add(label);
 
         // Subscribe to the bus

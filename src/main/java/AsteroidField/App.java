@@ -2,6 +2,7 @@ package AsteroidField;
 
 import AsteroidField.ui.CameraViewOverlay;
 import AsteroidField.ui.CameraViewLite;
+import AsteroidField.ui.HudText;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
@@ -63,13 +64,18 @@ public class App extends Application {
         // Side (+X): from left
         CameraViewLite.poseLookAt(sideView, cx - DIST, cy, cz,  cx, cy, cz,  FOV);
 
+        // --- HUD text overlay ---
+        HudText hud = new HudText();
+        
         // --- Stack overlays over the main 3D view ---
-        StackPane centerStack = new StackPane(fieldView, topOverlay, sideOverlay);
+        StackPane centerStack = new StackPane(fieldView, topOverlay, sideOverlay, hud);
         StackPane.setAlignment(topOverlay,  Pos.TOP_LEFT);
         StackPane.setAlignment(sideOverlay, Pos.TOP_RIGHT);
+        StackPane.setAlignment(hud, Pos.BOTTOM_LEFT);
         Insets hudPad = new Insets(12);
         StackPane.setMargin(topOverlay, hudPad);
         StackPane.setMargin(sideOverlay, hudPad);
+        StackPane.setMargin(hud, hudPad);
         root.setCenter(centerStack);
         
         topOverlay.setBackground(Background.EMPTY);

@@ -165,7 +165,7 @@ public class AsteroidField3DView extends Pane {
                 collidables,
                 cameraCraft
         );
-        tetherSystem.setEnabled(false);
+        tetherSystem.setEnabled(true); //enables the physics not the tether input
 
         // Per-tether feel
         for (int i = 0; i < 2; i++) {
@@ -299,7 +299,8 @@ public class AsteroidField3DView extends Pane {
         tetherToggle = new ToggleButton("Tethers (beta)");
         tetherToggle.setTooltip(new Tooltip("Enable/disable tether mechanic. LMB/RMB fire. Hold SHIFT to pull. CTRL to release."));
         tetherToggle.selectedProperty().addListener((obs, was, is) -> {
-            if (tetherSystem != null) tetherSystem.setEnabled(is);
+            if (tetherSystem != null) 
+                tetherSystem.setTetherInputEnabled(is);
         });
 
         Button spawn3Btn = new Button("Spawn 3 Asteroids (test)");
