@@ -12,14 +12,14 @@ public final class TetherTuningUI {
     private TetherTuningUI() {}
 
     /** Build a VBox that edits all tethers in the system. */
-    public static VBox build(TetherSystem system) {
+    public static VBox build(TetherController controller) {
         VBox box = new VBox(8);
         box.setPadding(new Insets(8));
         box.setFillWidth(true);
         box.setId("tether-tuning");
 
         // Use tether[0] for initial values; fall back to sensible defaults
-        Tether t0 = system.getTether(0);
+        Tether t0 = controller.getTether(0);
         double k0       = (t0 != null) ? t0.getStiffness()        : 160;
         double zeta0    = (t0 != null) ? t0.getDampingRatio()     : 0.9;
         double reel0    = (t0 != null) ? t0.getReelRate()         : 240;
@@ -46,12 +46,12 @@ public final class TetherTuningUI {
         );
 
         // Apply changes to ALL tethers
-        spK.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setStiffness(          safe(nv, 160))));
-        spZ.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setDampingRatio( clamp(safe(nv, 0.9), 0, 2))));
-        spReel.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setReelRate(          safe(nv, 240))));
-        spFmax.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setMaxForce(          safe(nv, 900))));
-        spSlack.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setSlackEps(   clamp(safe(nv, 0.02), 0, 1))));
-        spZPerp.valueProperty().addListener((o, ov, nv) -> forAll(system, t -> t.setPerpDampingRatio( clamp(safe(nv, 0.15), 0, 1))));
+        spK.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setStiffness(          safe(nv, 160))));
+        spZ.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setDampingRatio( clamp(safe(nv, 0.9), 0, 2))));
+        spReel.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setReelRate(          safe(nv, 240))));
+        spFmax.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setMaxForce(          safe(nv, 900))));
+        spSlack.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setSlackEps(   clamp(safe(nv, 0.02), 0, 1))));
+        spZPerp.valueProperty().addListener((o, ov, nv) -> forAll(controller, t -> t.setPerpDampingRatio( clamp(safe(nv, 0.15), 0, 1))));
 
         return box;
     }
@@ -72,7 +72,7 @@ public final class TetherTuningUI {
         return v;
     }
 
-    private static void forAll(TetherSystem sys, java.util.function.Consumer<Tether> f) {
+    private static void forAll(TetherController sys, java.util.function.Consumer<Tether> f) {
         for (int i = 0; ; i++) {
             Tether t = sys.getTether(i);
             if (t == null) break;

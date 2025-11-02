@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.util;
 
 import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;

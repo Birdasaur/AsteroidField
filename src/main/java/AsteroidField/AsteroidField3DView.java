@@ -1,25 +1,25 @@
 package AsteroidField;
 
-import AsteroidField.util.TrackBallController;
 import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
+import AsteroidField.physics.PhysicsSystem;
 import AsteroidField.spacecraft.FancyCraft;
 import AsteroidField.spacecraft.collision.SpacecraftCollisionContributor;
 import AsteroidField.tether.CameraKinematicAdapter;
-import AsteroidField.tether.Tether;
-import AsteroidField.tether.TetherSystem;
+import AsteroidField.util.FpsLookController;
+import AsteroidField.tether.TetherController;
 import AsteroidField.tether.TetherTuningUI;
 import AsteroidField.tether.ThrusterController;
 import AsteroidField.util.AsteroidUtils;
+import AsteroidField.util.TrackBallController;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -45,7 +45,11 @@ import javafx.scene.shape.DrawMode;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 
+/**
+ * Main 3D view. Now wired to an always-on PhysicsSystem; tethers are a feature controller.
+ */
 public class AsteroidField3DView extends Pane {
+
     private SubScene subScene;
     private PerspectiveCamera camera;
     private Group world;
@@ -73,20 +77,21 @@ public class AsteroidField3DView extends Pane {
     // Family-specific controls area
     private final HBox dynamicParamBox = new HBox(10);
 
-    // Controllers
+    // Controllers / toggles
     private ToggleButton cameraModeToggle;
     private ToggleButton fpsLookToggle;
     private Button resetCameraBtn;
     private ComboBox<String> asteroidSelectorBox;
-    private SpacecraftCollisionContributor shipCollisions;
 
     private ThrusterController thrusterController;
     private TrackBallController trackballController;
     private FpsLookController fpsLook;
     private Node craftProxy;
-    
-    // Tether system
-    private TetherSystem tetherSystem;
+
+    // NEW: physics + features
+    private PhysicsSystem physics;
+    private TetherController tetherController;
+    private SpacecraftCollisionContributor shipCollisions;
     private CameraKinematicAdapter cameraCraft;
     private ToggleButton tetherToggle;
 
@@ -141,7 +146,7 @@ public class AsteroidField3DView extends Pane {
         subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
 
-        // Camera as kinematic craft for tethers
+        // Camera as kinematic craft for physics
         cameraCraft = CameraKinematicAdapter.attach(subScene, world);
         cameraCraft.setMass(1.5);
         cameraCraft.setLinearDampingPerSecond(0.18);
@@ -153,23 +158,46 @@ public class AsteroidField3DView extends Pane {
         fpsLook.setSensitivity(0.20);
         fpsLook.setSmoothing(0.35);
         fpsLook.setPitchLimits(-85, 85);
-        fpsLook.setYawPitch(0, 0); // ensure initial orientation known
+        fpsLook.setYawPitch(0, 0);
 
-        // Tethers collide with ALL asteroid meshes
-        Supplier<List<Node>> collidables = () -> new ArrayList<>(asteroidViews);
+        // Trackball controller (OFF by default since FPS look is default)
+        trackballController = new TrackBallController(subScene, camera, asteroidViews);
+        trackballController.setEnabled(false);
 
-        tetherSystem = new TetherSystem(
-                subScene,
-                (PerspectiveCamera) subScene.getCamera(),
-                world,
-                collidables,
-                cameraCraft
-        );
-        tetherSystem.setEnabled(true); //enables the physics not the tether input
+        // Craft proxy (debug vis, used in mini-cams)
+        FancyCraft fancy = new FancyCraft();
+        fancy.setScale(0.8);
+        fancy.setVisible(false);
+        world.getChildren().add(fancy);
+        AsteroidUtils.bindNodePose(fancy, getCameraFrameNode());
+        this.craftProxy = fancy;
 
-        // Per-tether feel
+        // --- PHYSICS WIRING (always on) ---
+        physics = new PhysicsSystem(120); // 120 Hz fixed-step
+        physics.setEnabled(true);
+        physics.setCraft(cameraCraft);
+
+        // Collidables supplier (MeshViews only) – used by tethers & collisions
+        java.util.function.Supplier<java.util.List<javafx.scene.Node>> collidables =
+                () -> new ArrayList<>(asteroidViews);
+
+        // Thrusters (contributor)
+        thrusterController = new ThrusterController(subScene, camera, cameraCraft);
+        thrusterController.setEnabled(true);
+        thrusterController.setThrustPower(480);
+        thrusterController.setVerticalPower(360);
+        thrusterController.setBrakePower(1400);
+        thrusterController.setDampenerPower(220);
+        thrusterController.setLookSensitivity(0.0); // keep FPSLook in charge
+        physics.addContributor(thrusterController);
+
+        // Tethers (feature controller; input gated by UI toggle)
+        tetherController = new TetherController(subScene, camera, world, collidables, cameraCraft);
+        tetherController.setSymmetricWingOffsets(20, 50, 5);
+        tetherController.setTetherInputEnabled(false); // off by default; toggle controls this
+        // Per-tether feel (same defaults you used previously)
         for (int i = 0; i < 2; i++) {
-            Tether t = tetherSystem.getTether(i);
+            var t = tetherController.getTether(i);
             if (t != null) {
                 t.setRayFrontFaceOnly(true);
                 t.setAllowAabbFallbackOnMeshMiss(false);
@@ -182,47 +210,17 @@ public class AsteroidField3DView extends Pane {
                 t.setDebugPersistOnMiss(true);
             }
         }
-        tetherSystem.setSymmetricWingOffsets(20, 50, 5);
+        physics.addContributor(tetherController);
 
-        // Micro-thrusters (independent of tether system)
-        thrusterController = new AsteroidField.tether.ThrusterController(subScene, camera, cameraCraft);
-        tetherSystem.addContributor(thrusterController); // contributor to fixed-step; still independent enable
-        thrusterController.setEnabled(true);             // default ON for arcade feel
-        thrusterController.setThrustPower(480);
-        thrusterController.setVerticalPower(360);
-        thrusterController.setBrakePower(1400);
-        thrusterController.setDampenerPower(220);
-        // If ThrusterController also handles look, keep its look sensitivity low/neutral or disabled.
-        thrusterController.setLookSensitivity(0.0);
-
-        // Ship collisions as a physics contributor (runs in the same fixed step as thrusters/tethers)
-        shipCollisions = new SpacecraftCollisionContributor(
-                world,            // world root (same node tethers use as parent3D)
-                cameraCraft,      // your kinematic craft adapter
-                collidables,      // same supplier the tethers use
-                1.25              // craft radius; tune to your world scale
-        );
-        shipCollisions.setFrontFaceOnly(true);   // use true once outer faces are confirmed outward
+        // Ship collisions (contributor)
+        shipCollisions = new SpacecraftCollisionContributor(world, cameraCraft, collidables, 1.5);
+        shipCollisions.setFrontFaceOnly(true); // set false if your windings vary
         shipCollisions.setMaxIterations(2);
         shipCollisions.setRestitution(0.05);
         shipCollisions.setFriction(0.15);
+        physics.addContributor(shipCollisions);
 
-        tetherSystem.addContributor(shipCollisions);        
-        
-        // Trackball controller (OFF by default since FPS look is default)
-        trackballController = new TrackBallController(subScene, camera, asteroidViews);
-        trackballController.setEnabled(false);
-
-        FancyCraft fancy = new FancyCraft();
-        fancy.setScale(0.8);          // tune to your world scale
-        fancy.setVisible(false);      // hidden in main view; shown in mini-cams only
-        world.getChildren().add(fancy);
-
-        // Bind craft pose to the kinematic rig node (NOT the camera)
-        AsteroidUtils.bindNodePose(fancy, getCameraFrameNode());
-
-        this.craftProxy = fancy;
-        
+        // Finish scene graph
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
@@ -269,7 +267,7 @@ public class AsteroidField3DView extends Pane {
             cameraCraft.resetPosition(0, 0, -600);
 
             // Release all tethers
-            if (tetherSystem != null) tetherSystem.releaseAll();
+            if (tetherController != null) tetherController.releaseAll();
 
             // Reset FPS yaw/pitch (do NOT manipulate camera.setRotate directly)
             if (fpsLook != null) {
@@ -279,9 +277,6 @@ public class AsteroidField3DView extends Pane {
 
             // If trackball is active, also clear any selected asteroid rotation
             if (selectedAsteroid != null && trackballController.isEnabled()) {
-                selectedAsteroid.setRotationAxis(javafx.geometry.Point3D.ZERO.add(1, 0, 0));
-                selectedAsteroid.setRotate(0);
-                selectedAsteroid.setRotationAxis(javafx.geometry.Point3D.ZERO.add(0, 1, 0));
                 selectedAsteroid.setRotate(0);
             }
         });
@@ -297,15 +292,14 @@ public class AsteroidField3DView extends Pane {
         wireframeVisible = wireframeToggle.isSelected();
 
         tetherToggle = new ToggleButton("Tethers (beta)");
-        tetherToggle.setTooltip(new Tooltip("Enable/disable tether mechanic. LMB/RMB fire. Hold SHIFT to pull. CTRL to release."));
+        tetherToggle.setTooltip(new Tooltip("Enable/disable tether controls. LMB/RMB fire. Hold SHIFT to pull. CTRL to release."));
         tetherToggle.selectedProperty().addListener((obs, was, is) -> {
-            if (tetherSystem != null) 
-                tetherSystem.setTetherInputEnabled(is);
+            if (tetherController != null) tetherController.setTetherInputEnabled(is);
         });
 
         Button spawn3Btn = new Button("Spawn 3 Asteroids (test)");
         spawn3Btn.setTooltip(new Tooltip("Keep primary and add two more at spaced positions"));
-        spawn3Btn.setOnAction(e -> spawnTestAsteroids()); // corrected to add exactly two extras
+        spawn3Btn.setOnAction(e -> spawnTestAsteroids());
 
         Button clearExtrasBtn = new Button("Clear Extras");
         clearExtrasBtn.setTooltip(new Tooltip("Remove extra asteroids and keep only the primary"));
@@ -472,7 +466,8 @@ public class AsteroidField3DView extends Pane {
 
     // Side Bar Tether Controls
     public VBox getTetherTuningBox() {
-        return TetherTuningUI.build(tetherSystem);
+        // Updated to use TetherController rather than the old TetherSystem
+        return TetherTuningUI.build(tetherController);
     }
 
     /** Update family-specific parameter controls. */
@@ -536,39 +531,35 @@ public class AsteroidField3DView extends Pane {
         }
     }
 
-/** Spawn three extra asteroids (for a total of four) at fixed test positions. */
-private void spawnTestAsteroids() {
-    // Desired world positions for the 3 extras
-    Point3D[] positions = new Point3D[] {
-        new Point3D( 500,  300,   0),  // extra #1
-        new Point3D(-500,  -50, 300),  // extra #2
-        new Point3D( 500, -300,   0)   // extra #3
-    };
-    double[] radiusScales = new double[] { 0.9, 0.8, 0.8 };
+    /** Spawn three extra asteroids (for a total of four) at fixed test positions. */
+    private void spawnTestAsteroids() {
+        Point3D[] positions = new Point3D[] {
+            new Point3D( 500,  300,   0),
+            new Point3D(-500,  -50, 300),
+            new Point3D( 500, -300,   0)
+        };
+        double[] radiusScales = new double[] { 0.9, 0.8, 0.8 };
 
-    // We want: primary (index 0) + 3 extras = 4 total
-    // If fewer than 4 exist, add the missing ones at the fixed positions above.
-    while (asteroidViews.size() < 4) {
-        int extraIndex = asteroidViews.size() - 1; // 0 = primary, so extras start at 1
-        int slot = Math.max(0, Math.min(extraIndex, positions.length - 1));
-        AsteroidParameters p = params.toBuilder()
-                .seed(seedRng.nextLong())
-                .radius(params.getRadius() * radiusScales[slot])
-                .build();
-        MeshView ax = AsteroidUtils.createAsteroidAt(p, positions[slot]);
-        addAsteroid(ax);
-    }
+        while (asteroidViews.size() < 4) {
+            int extraIndex = asteroidViews.size() - 1;
+            int slot = Math.max(0, Math.min(extraIndex, positions.length - 1));
+            AsteroidParameters p = params.toBuilder()
+                    .seed(seedRng.nextLong())
+                    .radius(params.getRadius() * radiusScales[slot])
+                    .build();
+            MeshView ax = AsteroidUtils.createAsteroidAt(p, positions[slot]);
+            addAsteroid(ax);
+        }
 
-    // Keep selection on whatever was selected (usually primary). Don’t force-change.
-    updatingAsteroidCombo = true;
-    try {
-        int selIndex = asteroidViews.indexOf(selectedAsteroid);
-        if (selIndex < 0) selIndex = 0;
-        asteroidSelectorBox.getSelectionModel().select(selIndex);
-    } finally {
-        updatingAsteroidCombo = false;
+        updatingAsteroidCombo = true;
+        try {
+            int selIndex = asteroidViews.indexOf(selectedAsteroid);
+            if (selIndex < 0) selIndex = 0;
+            asteroidSelectorBox.getSelectionModel().select(selIndex);
+        } finally {
+            updatingAsteroidCombo = false;
+        }
     }
-}
 
     /** Remove any extra asteroids and keep only the primary. */
     private void clearExtraAsteroids() {
@@ -587,8 +578,9 @@ private void spawnTestAsteroids() {
         }
     }
 
+    // --- Exposed getters for other UI parts ---
     public SubScene getSubScene() { return subScene; }
-    public Group getWorldRoot()   { return world; }
+    public Group getWorldRoot() { return world; }
     public PerspectiveCamera getMainCamera() { return camera; }
     public void addCameraNode(Node cam) { world.getChildren().add(cam); }
     public Node getCameraFrameNode() { return cameraCraft.getRigNode(); }
