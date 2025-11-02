@@ -1,4 +1,4 @@
-package AsteroidField.tether;
+package AsteroidField.util;
 
 import javafx.geometry.Point3D;
 import javafx.scene.PerspectiveCamera;

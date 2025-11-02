@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import AsteroidField.tether.PhysicsContributor;
-import AsteroidField.tether.CameraKinematicAdapter;
+import AsteroidField.physics.PhysicsContributor;
+import AsteroidField.spacecraft.CameraKinematicAdapter;
 import javafx.geometry.Point3D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -149,6 +149,13 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
             // craft.setVelocity(v);
         }
     }
+    @Override
+    public AsteroidField.physics.PhysicsPhase getPhase() {
+        return AsteroidField.physics.PhysicsPhase.COLLISION;
+    }
+
+    @Override
+    public int getPriority() { return 0; }
 
     // --- helpers ---
 

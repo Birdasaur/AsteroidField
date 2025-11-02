@@ -4,15 +4,16 @@ import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
+import AsteroidField.physics.CraftIntegratorContributor;
 import AsteroidField.physics.PhysicsSystem;
 import AsteroidField.spacecraft.FancyCraft;
 import AsteroidField.spacecraft.collision.SpacecraftCollisionContributor;
-import AsteroidField.tether.CameraKinematicAdapter;
-import AsteroidField.util.FpsLookController;
+import AsteroidField.spacecraft.CameraKinematicAdapter;
 import AsteroidField.tether.TetherController;
 import AsteroidField.tether.TetherTuningUI;
-import AsteroidField.tether.ThrusterController;
+import AsteroidField.spacecraft.control.ThrusterController;
 import AsteroidField.util.AsteroidUtils;
+import AsteroidField.util.FpsLookController;
 import AsteroidField.util.TrackBallController;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,7 +47,7 @@ import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 
 /**
- * Main 3D view. Now wired to an always-on PhysicsSystem; tethers are a feature controller.
+ * Main 3D view. Always-on PhysicsSystem orchestrates contributors; tethers are a feature controller.
  */
 public class AsteroidField3DView extends Pane {
 
@@ -88,7 +89,7 @@ public class AsteroidField3DView extends Pane {
     private FpsLookController fpsLook;
     private Node craftProxy;
 
-    // NEW: physics + features
+    // Physics + features
     private PhysicsSystem physics;
     private TetherController tetherController;
     private SpacecraftCollisionContributor shipCollisions;
@@ -175,13 +176,12 @@ public class AsteroidField3DView extends Pane {
         // --- PHYSICS WIRING (always on) ---
         physics = new PhysicsSystem(120); // 120 Hz fixed-step
         physics.setEnabled(true);
-        physics.setCraft(cameraCraft);
 
         // Collidables supplier (MeshViews only) – used by tethers & collisions
         java.util.function.Supplier<java.util.List<javafx.scene.Node>> collidables =
                 () -> new ArrayList<>(asteroidViews);
 
-        // Thrusters (contributor)
+        // 1) Thrusters (forces from input)
         thrusterController = new ThrusterController(subScene, camera, cameraCraft);
         thrusterController.setEnabled(true);
         thrusterController.setThrustPower(480);
@@ -191,11 +191,10 @@ public class AsteroidField3DView extends Pane {
         thrusterController.setLookSensitivity(0.0); // keep FPSLook in charge
         physics.addContributor(thrusterController);
 
-        // Tethers (feature controller; input gated by UI toggle)
+        // 2) Tethers (spring forces + input gated by UI toggle)
         tetherController = new TetherController(subScene, camera, world, collidables, cameraCraft);
         tetherController.setSymmetricWingOffsets(20, 50, 5);
         tetherController.setTetherInputEnabled(false); // off by default; toggle controls this
-        // Per-tether feel (same defaults you used previously)
         for (int i = 0; i < 2; i++) {
             var t = tetherController.getTether(i);
             if (t != null) {
@@ -212,7 +211,10 @@ public class AsteroidField3DView extends Pane {
         }
         physics.addContributor(tetherController);
 
-        // Ship collisions (contributor)
+        // 3) Craft integration (apply accumulated forces)
+        physics.addContributor(new CraftIntegratorContributor(cameraCraft));
+
+        // 4) Ship collisions (resolve & correct)
         shipCollisions = new SpacecraftCollisionContributor(world, cameraCraft, collidables, 1.5);
         shipCollisions.setFrontFaceOnly(true); // set false if your windings vary
         shipCollisions.setMaxIterations(2);
@@ -466,7 +468,7 @@ public class AsteroidField3DView extends Pane {
 
     // Side Bar Tether Controls
     public VBox getTetherTuningBox() {
-        // Updated to use TetherController rather than the old TetherSystem
+        // Uses TetherController rather than the old TetherSystem
         return TetherTuningUI.build(tetherController);
     }
 

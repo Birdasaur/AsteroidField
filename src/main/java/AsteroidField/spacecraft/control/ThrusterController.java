@@ -1,5 +1,7 @@
-package AsteroidField.tether;
+package AsteroidField.spacecraft.control;
 
+import AsteroidField.physics.PhysicsContributor;
+import AsteroidField.tether.Tether;
 import javafx.geometry.Point3D;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
@@ -237,6 +239,13 @@ public class ThrusterController implements PhysicsContributor {
         Point3D fP = fwdScene.subtract(oP).normalize();
         return new Basis(rP, uP, fP);
     }
+    @Override
+    public AsteroidField.physics.PhysicsPhase getPhase() {
+        return AsteroidField.physics.PhysicsPhase.FORCE;
+    }
+
+    @Override
+    public int getPriority() { return 0; } // gravity could be -10 if you add it later
 
     private record Basis(Point3D right, Point3D up, Point3D fwd) {}
 }

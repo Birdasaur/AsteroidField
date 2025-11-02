@@ -1,5 +1,7 @@
 package AsteroidField.tether;
 
+import AsteroidField.util.RayUtil;
+import AsteroidField.physics.PhysicsContributor;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -145,4 +147,12 @@ public final class TetherController implements PhysicsContributor {
                 .add(upParent.multiply(local.getY()))
                 .add(fwdParent.multiply(local.getZ()));
     }
+    @Override
+    public AsteroidField.physics.PhysicsPhase getPhase() {
+        return AsteroidField.physics.PhysicsPhase.FORCE;
+    }
+
+    @Override
+    public int getPriority() { return 10; } // runs after thrusters within FORCE
+    
 }

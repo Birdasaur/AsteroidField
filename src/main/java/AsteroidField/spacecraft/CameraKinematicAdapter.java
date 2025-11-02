@@ -1,5 +1,7 @@
-package AsteroidField.tether;
+package AsteroidField.spacecraft;
 
+import AsteroidField.physics.KinematicCraft;
+import AsteroidField.tether.Tether;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.Node;
