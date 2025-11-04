@@ -1,6 +1,6 @@
-package AsteroidField.field.ui;
+package AsteroidField.asteroids.field.ui;
 
-import AsteroidField.field.families.WeightedFamilyEntry;
+import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
 import javafx.geometry.Pos;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;

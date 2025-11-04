@@ -1,4 +1,4 @@
-package AsteroidField.field.families;
+package AsteroidField.asteroids.field.families;
 
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import javafx.beans.property.BooleanProperty;

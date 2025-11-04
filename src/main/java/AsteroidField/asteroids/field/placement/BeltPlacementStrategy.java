@@ -1,4 +1,4 @@
-package AsteroidField.field.placement;
+package AsteroidField.asteroids.field.placement;
 
 import java.util.ArrayList;
 import java.util.HashMap;

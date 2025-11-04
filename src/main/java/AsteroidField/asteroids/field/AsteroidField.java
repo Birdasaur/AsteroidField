@@ -1,4 +1,4 @@
-package AsteroidField.field;
+package AsteroidField.asteroids.field;
 
 import java.util.List;
 import javafx.scene.Group;

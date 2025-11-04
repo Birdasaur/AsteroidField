@@ -1,11 +1,11 @@
-package AsteroidField.field;
+package AsteroidField.asteroids.field;
 
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
-import AsteroidField.field.families.FamilyPool;
-import AsteroidField.field.families.FamilySupport;
-import AsteroidField.field.placement.PlacementStrategy;
-import AsteroidField.field.placement.PlacementStrategy.Placement;
+import AsteroidField.asteroids.field.families.FamilyPool;
+import AsteroidField.asteroids.field.families.FamilySupport;
+import AsteroidField.asteroids.field.placement.PlacementStrategy;
+import AsteroidField.asteroids.field.placement.PlacementStrategy.Placement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;

@@ -1,5 +1,6 @@
 package AsteroidField;
 
+import AsteroidField.css.StyleResourceProvider;
 import AsteroidField.ui.CameraViewOverlay;
 import AsteroidField.ui.CameraViewLite;
 import AsteroidField.ui.HudText;

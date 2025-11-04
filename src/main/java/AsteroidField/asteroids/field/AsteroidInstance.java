@@ -1,4 +1,4 @@
-package AsteroidField.field;
+package AsteroidField.asteroids.field;
 
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import javafx.geometry.Point3D;

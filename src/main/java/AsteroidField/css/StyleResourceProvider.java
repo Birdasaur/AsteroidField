@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.css;
 
 import java.io.InputStream;
 import java.net.URL;
