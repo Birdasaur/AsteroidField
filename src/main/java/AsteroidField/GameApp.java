@@ -5,6 +5,7 @@ import AsteroidField.events.AudioEvent;
 import AsteroidField.events.SfxEvent;
 import AsteroidField.runtime.DockingController;
 import AsteroidField.runtime.DockingModeController;
+import AsteroidField.spacecraft.FancyCraft;
 import AsteroidField.ui.overlay.OverlayController;
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -15,19 +16,22 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Box;
 import javafx.stage.Stage;
 
 /**
  * Playable-demo shell. Uses Game3DView for the 3D world and an overlay
  * layer managed by OverlayController. DockingController (E/U) drives
- * the terminal overlay events for now.
+ * the terminal overlay events; DockingModeController reacts with
+ * physics pause/resume, craft visibility, and audio cues.
  */
 public class GameApp extends Application {
 
     OverlayController overlayController;
     DockingController dockingController;
     DockingModeController dockingModeController;
+    SfxPlayer sfx;
+    FancyCraft fancyCraft;
+
     @Override
     public void start(Stage stage) {
         // --- Core layout ---
@@ -40,9 +44,9 @@ public class GameApp extends Application {
 
         // TEMP craft proxy so you can see hide/show immediately.
         // Remove once your real craft rig is wired up.
-        Box tempCraft = new Box(40, 20, 60);
-        tempCraft.setTranslateZ(-200); // in front of camera a bit
-        gameView.setCraftProxy(tempCraft);
+        fancyCraft = new FancyCraft();
+        fancyCraft.setTranslateZ(-200); // in front of camera a bit
+        gameView.setCraftProxy(fancyCraft);
 
         Pane overlayDesktop = new Pane();
         overlayDesktop.setPickOnBounds(false);  // clicks pass through empty areas
@@ -55,37 +59,38 @@ public class GameApp extends Application {
 
         // --- Overlay controller (listens for ApplicationEvent.* on the Scene) ---
         overlayController = new OverlayController(scene, overlayDesktop);
-        // --- Docking controller (E/U to open/close terminal overlay) ---
+
+        // --- Input: Docking controller (E/U to open/close terminal overlay) ---
         dockingController = new DockingController(scene, gameView.getSubScene());
 
         // --- Audio: SFX (one-shots) ---
-        SfxPlayer sfx = new SfxPlayer(scene);
+        sfx = new SfxPlayer(scene);
         sfx.setMasterVolume(0.8);
         // listen for all SfxEvent.* fired anywhere in the scene graph
         scene.addEventHandler(SfxEvent.ANY, sfx);
         // preload a directory (filesystem) so first-play is instant
-        sfx.preloadDirectory("sfx/"); 
-        
-        // --- Docking mode hooks: hide/show craft, duck/restore music, optional SFX ---
-        final double MUSIC_LEVEL_NORMAL = 0.35;
-        final double MUSIC_LEVEL_DOCKED = 0.15;
+        sfx.preloadDirectory("sfx/");
 
-        
         // register a few aliases so the rest of your code isn’t tied to filenames
-        scene.getRoot().fireEvent(new SfxEvent( 
+        scene.getRoot().fireEvent(new SfxEvent(
             SfxEvent.REGISTER_SFX_ALIAS, "carl-tonight", "sfx/carl-tonight.wav"
         ));
-        scene.getRoot().fireEvent(new SfxEvent( 
+        scene.getRoot().fireEvent(new SfxEvent(
             SfxEvent.REGISTER_SFX_ALIAS, "dock_chime", "sfx/dock_chime.wav"
         ));
         scene.getRoot().fireEvent(new SfxEvent(
             SfxEvent.REGISTER_SFX_ALIAS, "undock_whoosh", "sfx/undock_whoosh.wav"
-        ));        
-        
+        ));
+
+        // --- Docking mode hooks: pause/resume physics, hide/show craft, audio cues ---
+        final double MUSIC_LEVEL_NORMAL = 0.35;
+        final double MUSIC_LEVEL_DOCKED = 0.15;
+
         dockingModeController = new DockingModeController(
             scene,
             /* onEnterDocked */ () -> {
-                // Hide craft proxy
+                // Pause simulation and hide craft proxy
+                gameView.pausePhysics();
                 gameView.setCraftProxyVisible(false);
 
                 // Duck music (safe if JukeBox not installed—no listener means no-op)
@@ -93,13 +98,14 @@ public class GameApp extends Application {
                     AudioEvent.SET_MUSIC_VOLUME, MUSIC_LEVEL_DOCKED
                 ));
 
-                // docking chime 
+                // docking chime (using alias)
                 scene.getRoot().fireEvent(new SfxEvent(
-                    SfxEvent.PLAY_SFX, "carl-tonight" //"dock_chime"
+                    SfxEvent.PLAY_SFX, "carl-tonight" // or "dock_chime"
                 ));
             },
             /* onExitDocked */ () -> {
-                // Show craft proxy
+                // Resume simulation and show craft proxy
+                gameView.resumePhysics();
                 gameView.setCraftProxyVisible(true);
 
                 // Restore music
@@ -113,7 +119,20 @@ public class GameApp extends Application {
                 ));
             }
         );
-
+// Toggle FPS look capture with F1; toggle tether input with F2'
+scene.setOnKeyPressed(e -> {
+    switch (e.getCode()) {
+        case F1 -> {
+            boolean on = !gameView.getFpsLook().isEnabled();
+            gameView.setFpsLookEnabled(on);
+        }
+        case F2 -> {
+            boolean allow = !gameView.getTethers().isTetherInputEnabled();
+            gameView.getTethers().setTetherInputEnabled(allow);
+        }
+        default -> { /* noop */ }
+    }
+});
         // --- Stage ---
         stage.setTitle("Asteroid Field — Playable Demo");
         stage.setScene(scene);

@@ -10,28 +10,32 @@ import javafx.scene.PerspectiveCamera;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.transform.Affine;
-import javafx.scene.transform.Rotate;
 import javafx.scene.transform.Transform;
+import javafx.scene.transform.Translate;
 
 /**
- * Skybox rendered as 6 textured quads arranged as a cube that follows the camera's position.
+ * Cube skybox that follows the camera position.
  *
- * Face mapping (atlas SINGLE path assumes 4x3 cross):
- *   front  = +Z  (row 1, col 1)
- *   back   = -Z  (row 1, col 3)
- *   right  = +X  (row 1, col 2)
- *   left   = -X  (row 1, col 0)
- *   top    = +Y  (row 0, col 1)
- *   bottom = -Y  (row 2, col 1)
+ * SINGLE expects a 4x3 horizontal cross atlas:
+ *
+ *           [  top  ]      (row 0, col 1)
+ * [ left ][ front ][ right ][ back ]  (row 1, col 0..3)
+ *           [ bottom ]      (row 2, col 1)
+ *
+ * Face mapping here:
+ *   front  = +Z (atlas row 1 col 1), inward normal -Z
+ *   back   = -Z (atlas row 1 col 3), inward normal +Z
+ *   right  = +X (atlas row 1 col 2), inward normal -X
+ *   left   = -X (atlas row 1 col 0), inward normal +X
+ *   top    = +Y (atlas row 0 col 1), inward normal -Y  (up points toward -Z)
+ *   bottom = -Y (atlas row 2 col 1), inward normal +Y  (up points toward +Z)
  */
 public class Skybox extends Group {
 
     public enum SkyboxImageType { MULTIPLE, SINGLE }
 
-    // Follows the camera's translation so the sky stays "infinitely" far.
-    private final Affine affine = new Affine();
+    private final Affine follow = new Affine(); // follows camera translation
 
-    // Faces (ImageViews act as textured quads)
     private final ImageView
             top    = new ImageView(),
             bottom = new ImageView(),
@@ -40,7 +44,6 @@ public class Skybox extends Group {
             back   = new ImageView(),
             front  = new ImageView();
 
-    // Convenient iteration order (doesn't affect rendering order with depth test on)
     private final ImageView[] views = new ImageView[]{ top, left, back, right, front, bottom };
 
     // MULTIPLE images
@@ -53,38 +56,34 @@ public class Skybox extends Group {
     private AnimationTimer timer;
     private final SkyboxImageType imageType;
 
-    /** SINGLE-image (4x3 cross) */
     public Skybox(Image singleImg, double size, PerspectiveCamera camera) {
-        super();
         this.imageType = SkyboxImageType.SINGLE;
         this.singleImg = singleImg;
         this.size.set(size);
         this.camera = camera;
 
-        getTransforms().add(affine);
+        getTransforms().add(follow);
         loadImageViews();
         getChildren().addAll(views);
         startTimer();
     }
 
-    /** MULTIPLE-images */
     public Skybox(Image topImg, Image bottomImg, Image leftImg, Image rightImg,
                   Image frontImg, Image backImg, double size, PerspectiveCamera camera) {
-        super();
         this.imageType = SkyboxImageType.MULTIPLE;
 
         this.topImg = topImg;
         this.bottomImg = bottomImg;
         this.leftImg = leftImg;
         this.rightImg = rightImg;
-        this.frontImg = frontImg; // +Z
-        this.backImg = backImg;   // -Z
+        this.frontImg = frontImg;
+        this.backImg = backImg;
 
         this.size.set(size);
         this.camera = camera;
 
         loadImageViews();
-        getTransforms().add(affine);
+        getTransforms().add(follow);
         getChildren().addAll(views);
         startTimer();
     }
@@ -95,77 +94,99 @@ public class Skybox extends Group {
 
     private void loadImageViews() {
         for (ImageView iv : views) {
-            iv.setSmooth(false);          // crisp sampling while we validate viewports
-            iv.setPreserveRatio(false);   // exact SxS quads
+            iv.setSmooth(false);          // keep nearest while validating
+            iv.setPreserveRatio(false);   // exact SxS faces
             iv.setMouseTransparent(true);
             iv.setDepthTest(DepthTest.ENABLE);
         }
         validateImageType();
     }
 
-    /**
-     * Positions and orients each face so the cube is centered at the origin,
-     * then moves each face ±S/2 along its inward normal (tiny inward EPS overlap).
-     * Uses center-pivot rotations for precise alignment.
-     */
-    private void layoutViews() {
-        final double S = getSize();
+    // ---------------------------------------------------------------------
+    // Core layout/orientation
+    // ---------------------------------------------------------------------
 
-        // Size and center each quad so its center is at (0,0) in local space
-        for (ImageView iv : views) {
-            iv.setFitWidth(S);
-            iv.setFitHeight(S);
-            iv.setTranslateX(-S / 2.0);
-            iv.setTranslateY(-S / 2.0);
-            iv.getTransforms().setAll(); // clear prior transforms
-        }
+private void layoutViews() {
+    final double S    = getSize();
+    final double half = S / 2.0;
+    final double EPS  = 0.01;
 
-        final double px = S / 2.0, py = S / 2.0;
-        final double EPS = 0.01; // tiny inward overlap to eliminate hairlines
-
-        // ==== Orientation preset that worked for your build (Preset A) ====
-
-        // back (-Z) : inward-facing (+Z) -> rotate 180° about Y, push -Z
-        back.getTransforms().addAll(
-            new Rotate(180, px, py, 0, Rotate.Y_AXIS),
-            new javafx.scene.transform.Translate(0, 0, -S/2 + EPS)
-        );
-
-        // front (+Z) : inward-facing (-Z) -> no Y-rotation, push +Z
-        front.getTransforms().addAll(
-            new Rotate(0, px, py, 0, Rotate.Y_AXIS),
-            new javafx.scene.transform.Translate(0, 0, +S/2 - EPS)
-        );
-
-        // left (-X) : inward-facing (+X) -> -90° about Y, push -X
-        left.getTransforms().addAll(
-            new Rotate(-90, px, py, 0, Rotate.Y_AXIS),
-            new javafx.scene.transform.Translate(-S/2 + EPS, 0, 0)
-        );
-
-        // right (+X) : inward-facing (-X) -> +90° about Y, push +X
-        right.getTransforms().addAll(
-            new Rotate(90, px, py, 0, Rotate.Y_AXIS),
-            new javafx.scene.transform.Translate(+S/2 - EPS, 0, 0)
-        );
-
-        // top (+Y) : inward-facing (-Y) -> -90° about X, push +Y
-        top.getTransforms().addAll(
-            new Rotate(-90, px, py, 0, Rotate.X_AXIS),
-            new javafx.scene.transform.Translate(0, +S/2 - EPS, 0)
-        );
-
-        // bottom (-Y) : inward-facing (+Y) -> +90° about X, push -Y
-        bottom.getTransforms().addAll(
-            new Rotate(90, px, py, 0, Rotate.X_AXIS),
-            new javafx.scene.transform.Translate(0, -S/2 + EPS, 0)
-        );
+    for (ImageView iv : views) {
+        iv.setFitWidth(S);
+        iv.setFitHeight(S);
+        iv.getTransforms().setAll();  // we'll install one Affine per face
     }
 
+    // Canonical outward normals and ups (keep RIGHT and BACK as you have them)
+    orientFace(back,   vec( 0,  0,  1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, +half)
+    orientFace(front,  vec( 0,  0, -1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, -half)
+    orientFace(right,  vec( 1,  0,  0), vec( 0,  1,  0), half, EPS); // center -> (+half, 0, 0)
+    orientFace(left,   vec(-1,  0,  0), vec( 0,  1,  0), half, EPS); // center -> (-half, 0, 0)
+
+    // For top/bottom, choose ups so seams align with front/back
+//    orientFace(top,    vec( 0,  1,  0), vec( 0,  0, -1), half, EPS); // center -> (0, +half, 0)
+//    orientFace(bottom, vec( 0, -1,  0), vec( 0,  0,  1), half, EPS); // center -> (0, -half, 0)
+    
+orientFace(top,    vec( 0, -1,  0), vec( 0,  0, -1), half, EPS);
+orientFace(bottom, vec( 0,  1,  0), vec( 0,  0,  1), half, EPS);
+
+}
+
+
+private void debugFaceCenters() {
+    System.out.println("— face centers (scene coords) —");
+    logCenter("BACK  ", back);
+    logCenter("FRONT ", front);
+    logCenter("RIGHT ", right);
+    logCenter("LEFT  ", left);
+    logCenter("TOP   ", top);
+    logCenter("BOTTOM", bottom);
+}
+
+private void logCenter(String name, ImageView iv) {
+    // Center of the quad: because we first translate by (-half,-half,0), local (0,0,0) is face center
+    var p = iv.localToScene(0, 0, 0);
+    System.out.printf("%s : (%.2f, %.2f, %.2f)%n", name, p.getX(), p.getY(), p.getZ());
+}
+
     /**
-     * For SINGLE atlas: create viewports and assign the single image.
-     * For MULTIPLE: assign one image per face.
+     * Apply a single Affine to 'face' that:
+     *  - rotates the local XY plane (normal +Z, up +Y) so its normal = 'normal' and up = 'up'
+     *  - then translates along 'normal' by 'push' units (push > 0)
      */
+private void orientFace(ImageView face, Vec3 normal, Vec3 up, double half, double eps) {
+    // Desired outward normal (from origin to face center) and a face-up
+    Vec3 n = normal.normalized();
+    Vec3 u = up.normalized();
+
+    // Right-handed orthonormal basis: r, u', n
+    Vec3 r = u.cross(n).normalized();
+    u = n.cross(r).normalized(); // re-orthogonalize up
+
+    // Our local quad coordinates range from (0..S, 0..S) in X/Y with Z=0.
+    // We want the quad's CENTER (S/2,S/2,0) to land at world position n*(half - eps),
+    // and local axes to align with r (X), u (Y), n (Z).
+    // So world(P) = R * P + T, with columns of R = (r, u, n) and
+    // T = n*(half - eps) - R * (S/2, S/2, 0)^T = n*(half - eps) - r*half - u*half
+    Vec3 t = n.scale(half - eps)
+             .minus(r.scale(half))
+             .minus(u.scale(half));
+
+    // JavaFX Affine (mxx,mxy,mxz,tx,  myx,myy,myz,ty,  mzx,mzy,mzz,tz)
+    Affine A = new Affine(
+        r.x, u.x, n.x, t.x,
+        r.y, u.y, n.y, t.y,
+        r.z, u.z, n.z, t.z
+    );
+
+    face.getTransforms().setAll(A);  // single, atomic transform = no order issues
+}
+
+
+    // ---------------------------------------------------------------------
+    // SINGLE / MULTIPLE
+    // ---------------------------------------------------------------------
+
     private void validateImageType() {
         switch (imageType) {
             case SINGLE -> loadSingleImageViewports();
@@ -173,62 +194,40 @@ public class Skybox extends Group {
         }
     }
 
-    /**
-     * SINGLE (atlas) mode: exact, integer-aligned full-cell viewports.
-     * Mapping:
-     *   row 0: [ top ] at (1,0)
-     *   row 1: [left][front][right][back] at (0..3,1)
-     *   row 2: [bottom] at (1,2)
-     */
     private void loadSingleImageViewports() {
         layoutViews();
 
-        final double w = singleImg.getWidth();
-        final double h = singleImg.getHeight();
-
-        // integer cell sizes to avoid fractional sampling/cropping
-        final int cellW = (int)Math.round(w / 4.0);
-        final int cellH = (int)Math.round(h / 3.0);
-
-        if (cellW <= 0 || cellH <= 0 || cellW != cellH) {
-            throw new IllegalArgumentException(
-                "Atlas must be a 4x3 grid of equal square cells. Got cellW=" + cellW + " cellH=" + cellH);
+        final int W = (int)Math.round(singleImg.getWidth());
+        final int H = (int)Math.round(singleImg.getHeight());
+        final int cell = W / 4;
+        if (cell <= 0 || cell != H / 3 || W != cell * 4 || H != cell * 3) {
+            throw new IllegalArgumentException("Atlas must be exact 4x3 grid of equal squares. Got: "
+                    + W + "x" + H);
         }
-        final int cell = cellW;
 
-        // (optional) keep size a multiple of cell for nice round numbers
-        recalculateSize(cell);
-
-        // Full, symmetric rectangles (no inset/bleed in code)
         top.setViewport   (new Rectangle2D(1L * cell, 0L * cell, cell, cell));
         left.setViewport  (new Rectangle2D(0L * cell, 1L * cell, cell, cell));
-        front.setViewport (new Rectangle2D(1L * cell, 1L * cell, cell, cell)); // +Z
+        front.setViewport (new Rectangle2D(1L * cell, 1L * cell, cell, cell));
         right.setViewport (new Rectangle2D(2L * cell, 1L * cell, cell, cell));
-        back.setViewport  (new Rectangle2D(3L * cell, 1L * cell, cell, cell)); // -Z
+        back.setViewport  (new Rectangle2D(3L * cell, 1L * cell, cell, cell));
         bottom.setViewport(new Rectangle2D(1L * cell, 2L * cell, cell, cell));
 
         for (ImageView v : views) v.setImage(singleImg);
     }
 
-    private void recalculateSize(double cell) {
-        double factor = Math.floor(getSize() / cell);
-        if (factor < 1) factor = 1;
-        setSize(cell * factor);
-    }
-
     private void setMultipleImages() {
         layoutViews();
-
         front.setImage(frontImg);
         back.setImage(backImg);
         top.setImage(topImg);
         bottom.setImage(bottomImg);
         left.setImage(leftImg);
         right.setImage(rightImg);
+        debugFaceCenters();
     }
 
     // ---------------------------------------------------------------------
-    // Camera follow
+    // Follow camera
     // ---------------------------------------------------------------------
 
     private void startTimer() {
@@ -237,30 +236,58 @@ public class Skybox extends Group {
             public void handle(long now) {
                 Transform ct = (camera != null) ? camera.getLocalToSceneTransform() : null;
                 if (ct != null) {
-                    affine.setTx(ct.getTx());
-                    affine.setTy(ct.getTy());
-                    affine.setTz(ct.getTz());
+                    follow.setTx(ct.getTx());
+                    follow.setTy(ct.getTy());
+                    follow.setTz(ct.getTz());
                 }
             }
         };
         timer.start();
     }
 
-    /** Stop the internal animation timer (call when tearing down). */
-    public void stop() {
-        if (timer != null) timer.stop();
-    }
+    public void stop() { if (timer != null) timer.stop(); }
 
     // ---------------------------------------------------------------------
-    // Properties
+    // Size property
     // ---------------------------------------------------------------------
 
     private final DoubleProperty size = new SimpleDoubleProperty() {
-        @Override
-        protected void invalidated() { layoutViews(); }
+        @Override protected void invalidated() { layoutViews(); }
     };
 
     public final double getSize() { return size.get(); }
     public final void setSize(double value) { size.set(value); }
     public DoubleProperty sizeProperty() { return size; }
+
+    // ---------------------------------------------------------------------
+    // Small vector helper
+    // ---------------------------------------------------------------------
+
+    private static Vec3 vec(double x, double y, double z) { return new Vec3(x, y, z); }
+
+private static final class Vec3 {
+    final double x, y, z;
+    Vec3(double x, double y, double z) { this.x = x; this.y = y; this.z = z; }
+
+    double len() { return Math.sqrt(x*x + y*y + z*z); }
+
+    Vec3 normalized() {
+        double L = len();
+        return (L == 0) ? this : new Vec3(x / L, y / L, z / L);
+    }
+
+    Vec3 cross(Vec3 o) {
+        return new Vec3(
+            y * o.z - z * o.y,
+            z * o.x - x * o.z,
+            x * o.y - y * o.x
+        );
+    }
+
+    // --- add these ---
+    Vec3 scale(double s) { return new Vec3(x * s, y * s, z * s); }
+
+    Vec3 minus(Vec3 o) { return new Vec3(x - o.x, y - o.y, z - o.z); }
+}
+
 }
