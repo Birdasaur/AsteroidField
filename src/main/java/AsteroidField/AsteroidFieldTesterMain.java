@@ -8,13 +8,13 @@ import javafx.application.Application;
  * https://stackoverflow.com/questions/52569724/javafx-11-create-a-jar-file-with-gradle/52571719#52571719
  * for solution origin.
  */
-public class AsteroidFieldMain {
+public class AsteroidFieldTesterMain {
 
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        System.out.println("Entering AsteroidField main...");
-        Application.launch(GameApp.class, args);
+        System.out.println("Entering AsteroidField Tester main...");
+        Application.launch(App.class, args);
     }
 }
