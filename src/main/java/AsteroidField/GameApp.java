@@ -71,7 +71,10 @@ public class GameApp extends Application {
 
         
         // register a few aliases so the rest of your code isn’t tied to filenames
-        scene.getRoot().fireEvent(new SfxEvent( NEED TO MAKE SFX directory
+        scene.getRoot().fireEvent(new SfxEvent( 
+            SfxEvent.REGISTER_SFX_ALIAS, "carl-tonight", "sfx/carl-tonight.wav"
+        ));
+        scene.getRoot().fireEvent(new SfxEvent( 
             SfxEvent.REGISTER_SFX_ALIAS, "dock_chime", "sfx/dock_chime.wav"
         ));
         scene.getRoot().fireEvent(new SfxEvent(
@@ -91,7 +94,7 @@ public class GameApp extends Application {
 
                 // docking chime 
                 scene.getRoot().fireEvent(new SfxEvent(
-                    SfxEvent.PLAY_SFX, "dock_chime"
+                    SfxEvent.PLAY_SFX, "carl-tonight" //"dock_chime"
                 ));
             },
             /* onExitDocked */ () -> {
