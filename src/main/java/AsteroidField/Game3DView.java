@@ -1,10 +1,14 @@
 package AsteroidField;
 
+import AsteroidField.ui.scene3d.Skybox;
+import AsteroidField.util.ResourceUtils;
+import java.io.IOException;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SceneAntialiasing;
 import javafx.scene.SubScene;
+import javafx.scene.image.Image;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 
@@ -22,7 +26,7 @@ public class Game3DView extends Pane {
 
         this.camera = new PerspectiveCamera(true);
         camera.setNearClip(0.1);
-        camera.setFarClip(20000.0);
+        camera.setFarClip(100000.0);
         camera.setFieldOfView(60);
         camera.setTranslateZ(-800);
 
@@ -33,6 +37,17 @@ public class Game3DView extends Pane {
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
+        
+        // Load atlas for Skybox
+        Image atlas;
+        try {
+            atlas = ResourceUtils.load3DTextureImage("planar-skybox");
+            double skySize = 20000;
+            Skybox sky = new Skybox(atlas, skySize, camera);
+            worldRoot.getChildren().add(sky);        
+        } catch (IOException ex) {
+            System.getLogger(Game3DView.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
+        }
     }
 
     // --- New helpers for Step 4 ---

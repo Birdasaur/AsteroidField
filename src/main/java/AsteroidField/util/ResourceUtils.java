@@ -3,6 +3,7 @@ package AsteroidField.util;
 import AsteroidField.audio.AudioResourceProvider;
 import AsteroidField.events.ApplicationEvent;
 import AsteroidField.icons.IconResourceProvider;
+import AsteroidField.textures.TextureResourceProvider;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.embed.swing.SwingFXUtils;
@@ -62,13 +63,13 @@ public enum ResourceUtils {
         return loadImageFile(imageFile);
     }
 
-//    public static Image load3DTextureImage(String filename) throws IOException {
-//        try {
-//            return new Image(ImageResourceProvider.getResourceAsStream(filename + ".png"));
-//        } catch (NullPointerException e) {
-//            throw new IOException("Failed to open " + filename + ".png");
-//        }
-//    }
+    public static Image load3DTextureImage(String filename) throws IOException {
+        try {
+            return new Image(TextureResourceProvider.getResourceAsStream(filename + ".png"));
+        } catch (NullPointerException e) {
+            throw new IOException("Failed to open " + filename + ".png");
+        }
+    }
 
     public static WritableImage loadImageFileSubset(String filename,
                                                     int x1, int y1, int x2, int y2) throws IOException {

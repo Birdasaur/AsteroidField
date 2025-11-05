@@ -10,6 +10,7 @@ import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.SceneAntialiasing;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
@@ -31,7 +32,7 @@ public class GameApp extends Application {
     public void start(Stage stage) {
         // --- Core layout ---
         BorderPane root = new BorderPane();
-        Scene scene = new Scene(root, 1600, 900, true);
+        Scene scene = new Scene(root, 1600, 900, true, SceneAntialiasing.BALANCED);
         scene.setFill(Color.BLACK);
 
         // --- Center stack: 3D + overlays ---

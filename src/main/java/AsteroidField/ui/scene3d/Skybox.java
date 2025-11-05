@@ -1,109 +1,75 @@
-/*
- * Modified from Skybox.java
- * <p>
- * Original Copyright (C) 2013-2016, F(X)yz
- * All rights reserved.
- * <p>
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- * * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- * * Neither the name of F(X)yz, any associated website, nor the
- * names of its contributors may be used to endorse or promote products
- * derived from this software without specific prior written permission.
- * <p>
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL F(X)yz BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-
 package AsteroidField.ui.scene3d;
 
 import javafx.animation.AnimationTimer;
-import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Rectangle2D;
+import javafx.scene.DepthTest;
 import javafx.scene.Group;
 import javafx.scene.PerspectiveCamera;
-import javafx.scene.effect.Glow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.image.WritableImage;
 import javafx.scene.transform.Affine;
 import javafx.scene.transform.Rotate;
 import javafx.scene.transform.Transform;
 
 /**
- * @author Dub (FXyz's SpheroidMesh.  We miss you Jason)
+ * Skybox rendered as 6 textured quads arranged as a cube that follows the camera's position.
+ *
+ * Face mapping (atlas SINGLE path assumes 4x3 cross):
+ *   front  = +Z  (row 1, col 1)
+ *   back   = -Z  (row 1, col 3)
+ *   right  = +X  (row 1, col 2)
+ *   left   = -X  (row 1, col 0)
+ *   top    = +Y  (row 0, col 1)
+ *   bottom = -Y  (row 2, col 1)
  */
 public class Skybox extends Group {
 
-    public enum SkyboxImageType {
-        MULTIPLE, SINGLE
-    }
+    public enum SkyboxImageType { MULTIPLE, SINGLE }
 
-    private Affine affine = new Affine();
-    private ImageView
-        top = new ImageView(),
-        bottom = new ImageView(),
-        left = new ImageView(),
-        right = new ImageView(),
-        back = new ImageView(),
-        front = new ImageView();
+    // Follows the camera's translation so the sky stays "infinitely" far.
+    private final Affine affine = new Affine();
 
-    {
-        top.setId("top ");
-        bottom.setId("bottom ");
-        left.setId("left ");
-        right.setId("right ");
-        back.setId("back ");
-        front.setId("front ");
-    }
+    // Faces (ImageViews act as textured quads)
+    private final ImageView
+            top    = new ImageView(),
+            bottom = new ImageView(),
+            left   = new ImageView(),
+            right  = new ImageView(),
+            back   = new ImageView(),
+            front  = new ImageView();
 
-    public ImageView[] views = new ImageView[]{
-        top,
-        left,
-        back,
-        right,
-        front,
-        bottom
-    };
-    private Image
-        topImg, bottomImg, leftImg, rightImg, frontImg, backImg, singleImg;
-    private WritableImage convertedImage;
+    // Convenient iteration order (doesn't affect rendering order with depth test on)
+    private final ImageView[] views = new ImageView[]{ top, left, back, right, front, bottom };
+
+    // MULTIPLE images
+    private Image topImg, bottomImg, leftImg, rightImg, frontImg, backImg;
+
+    // SINGLE atlas
+    private Image singleImg;
 
     private final PerspectiveCamera camera;
     private AnimationTimer timer;
     private final SkyboxImageType imageType;
 
+    /** SINGLE-image (4x3 cross) */
     public Skybox(Image singleImg, double size, PerspectiveCamera camera) {
         super();
         this.imageType = SkyboxImageType.SINGLE;
-
         this.singleImg = singleImg;
         this.size.set(size);
         this.camera = camera;
 
         getTransforms().add(affine);
-
         loadImageViews();
-
         getChildren().addAll(views);
+        startTimer();
     }
 
-    public Skybox(Image topImg, Image bottomImg, Image leftImg, Image rightImg, Image frontImg, Image backImg, double size, PerspectiveCamera camera) {
+    /** MULTIPLE-images */
+    public Skybox(Image topImg, Image bottomImg, Image leftImg, Image rightImg,
+                  Image frontImg, Image backImg, double size, PerspectiveCamera camera) {
         super();
         this.imageType = SkyboxImageType.MULTIPLE;
 
@@ -111,169 +77,162 @@ public class Skybox extends Group {
         this.bottomImg = bottomImg;
         this.leftImg = leftImg;
         this.rightImg = rightImg;
-        this.frontImg = frontImg;
-        this.backImg = backImg;
+        this.frontImg = frontImg; // +Z
+        this.backImg = backImg;   // -Z
+
         this.size.set(size);
         this.camera = camera;
 
         loadImageViews();
-
         getTransforms().add(affine);
-
         getChildren().addAll(views);
-
         startTimer();
     }
 
+    // ---------------------------------------------------------------------
+    // Setup
+    // ---------------------------------------------------------------------
 
     private void loadImageViews() {
-
         for (ImageView iv : views) {
-            iv.setSmooth(true);
-            iv.setPreserveRatio(true);
+            iv.setSmooth(false);          // crisp sampling while we validate viewports
+            iv.setPreserveRatio(false);   // exact SxS quads
+            iv.setMouseTransparent(true);
+            iv.setDepthTest(DepthTest.ENABLE);
         }
-
         validateImageType();
-
-
-    }
-
-    private void layoutViews() {
-
-        for (ImageView v : views) {
-            v.setFitWidth(getSize());
-            v.setFitHeight(getSize());
-        }
-
-        back.setTranslateX(-0.5 * getSize());
-        back.setTranslateY(-0.5 * getSize());
-        back.setTranslateZ(-0.5 * getSize());
-
-        front.setTranslateX(-0.5 * getSize());
-        front.setTranslateY(-0.5 * getSize());
-        front.setTranslateZ(0.5 * getSize());
-        front.setRotationAxis(Rotate.Z_AXIS);
-        front.setRotate(-180);
-        front.getTransforms().add(new Rotate(180, front.getFitHeight() / 2, 0, 0, Rotate.X_AXIS));
-        front.setTranslateY(front.getTranslateY() - getSize());
-
-        top.setTranslateX(-0.5 * getSize());
-        top.setTranslateY(-1 * getSize());
-        top.setRotationAxis(Rotate.X_AXIS);
-        top.setRotate(-90);
-
-        bottom.setTranslateX(-0.5 * getSize());
-        bottom.setTranslateY(0);
-        bottom.setRotationAxis(Rotate.X_AXIS);
-        bottom.setRotate(90);
-
-        left.setTranslateX(-1 * getSize());
-        left.setTranslateY(-0.5 * getSize());
-        left.setRotationAxis(Rotate.Y_AXIS);
-        left.setRotate(90);
-
-        right.setTranslateX(0);
-        right.setTranslateY(-0.5 * getSize());
-        right.setRotationAxis(Rotate.Y_AXIS);
-        right.setRotate(-90);
-
     }
 
     /**
-     * for single image creates viewports and sets all views(image) to singleImg
-     * for multiple... sets images per view.
+     * Positions and orients each face so the cube is centered at the origin,
+     * then moves each face ±S/2 along its inward normal (tiny inward EPS overlap).
+     * Uses center-pivot rotations for precise alignment.
+     */
+    private void layoutViews() {
+        final double S = getSize();
+
+        // Size and center each quad so its center is at (0,0) in local space
+        for (ImageView iv : views) {
+            iv.setFitWidth(S);
+            iv.setFitHeight(S);
+            iv.setTranslateX(-S / 2.0);
+            iv.setTranslateY(-S / 2.0);
+            iv.getTransforms().setAll(); // clear prior transforms
+        }
+
+        final double px = S / 2.0, py = S / 2.0;
+        final double EPS = 0.01; // tiny inward overlap to eliminate hairlines
+
+        // ==== Orientation preset that worked for your build (Preset A) ====
+
+        // back (-Z) : inward-facing (+Z) -> rotate 180° about Y, push -Z
+        back.getTransforms().addAll(
+            new Rotate(180, px, py, 0, Rotate.Y_AXIS),
+            new javafx.scene.transform.Translate(0, 0, -S/2 + EPS)
+        );
+
+        // front (+Z) : inward-facing (-Z) -> no Y-rotation, push +Z
+        front.getTransforms().addAll(
+            new Rotate(0, px, py, 0, Rotate.Y_AXIS),
+            new javafx.scene.transform.Translate(0, 0, +S/2 - EPS)
+        );
+
+        // left (-X) : inward-facing (+X) -> -90° about Y, push -X
+        left.getTransforms().addAll(
+            new Rotate(-90, px, py, 0, Rotate.Y_AXIS),
+            new javafx.scene.transform.Translate(-S/2 + EPS, 0, 0)
+        );
+
+        // right (+X) : inward-facing (-X) -> +90° about Y, push +X
+        right.getTransforms().addAll(
+            new Rotate(90, px, py, 0, Rotate.Y_AXIS),
+            new javafx.scene.transform.Translate(+S/2 - EPS, 0, 0)
+        );
+
+        // top (+Y) : inward-facing (-Y) -> -90° about X, push +Y
+        top.getTransforms().addAll(
+            new Rotate(-90, px, py, 0, Rotate.X_AXIS),
+            new javafx.scene.transform.Translate(0, +S/2 - EPS, 0)
+        );
+
+        // bottom (-Y) : inward-facing (+Y) -> +90° about X, push -Y
+        bottom.getTransforms().addAll(
+            new Rotate(90, px, py, 0, Rotate.X_AXIS),
+            new javafx.scene.transform.Translate(0, -S/2 + EPS, 0)
+        );
+    }
+
+    /**
+     * For SINGLE atlas: create viewports and assign the single image.
+     * For MULTIPLE: assign one image per face.
      */
     private void validateImageType() {
         switch (imageType) {
-            case SINGLE:
-                loadSingleImageViewports();
-                break;
-            case MULTIPLE:
-                setMultipleImages();
-                break;
+            case SINGLE -> loadSingleImageViewports();
+            case MULTIPLE -> setMultipleImages();
         }
     }
 
     /**
-     * this will layout the viewports to this style pattern
-     * ____
-     * |top |
-     * ____|____|____ ____
-     * |left|fwd |rght|back|
-     * |____|____|____|____|
-     * |bot |
-     * |____|
+     * SINGLE (atlas) mode: exact, integer-aligned full-cell viewports.
+     * Mapping:
+     *   row 0: [ top ] at (1,0)
+     *   row 1: [left][front][right][back] at (0..3,1)
+     *   row 2: [bottom] at (1,2)
      */
     private void loadSingleImageViewports() {
         layoutViews();
-        double width = singleImg.getWidth(),
-            height = singleImg.getHeight();
 
-        //simple chack to see if cells will be square
-        if (width / 4 != height / 3) {
-            throw new UnsupportedOperationException("Image does not comply with size constraints");
+        final double w = singleImg.getWidth();
+        final double h = singleImg.getHeight();
+
+        // integer cell sizes to avoid fractional sampling/cropping
+        final int cellW = (int)Math.round(w / 4.0);
+        final int cellH = (int)Math.round(h / 3.0);
+
+        if (cellW <= 0 || cellH <= 0 || cellW != cellH) {
+            throw new IllegalArgumentException(
+                "Atlas must be a 4x3 grid of equal square cells. Got cellW=" + cellW + " cellH=" + cellH);
         }
-        double cellSize = singleImg.getWidth() - singleImg.getHeight();
+        final int cell = cellW;
 
-        recalculateSize(cellSize);
+        // (optional) keep size a multiple of cell for nice round numbers
+        recalculateSize(cell);
 
-        double
-            topx = cellSize, topy = 0,
+        // Full, symmetric rectangles (no inset/bleed in code)
+        top.setViewport   (new Rectangle2D(1L * cell, 0L * cell, cell, cell));
+        left.setViewport  (new Rectangle2D(0L * cell, 1L * cell, cell, cell));
+        front.setViewport (new Rectangle2D(1L * cell, 1L * cell, cell, cell)); // +Z
+        right.setViewport (new Rectangle2D(2L * cell, 1L * cell, cell, cell));
+        back.setViewport  (new Rectangle2D(3L * cell, 1L * cell, cell, cell)); // -Z
+        bottom.setViewport(new Rectangle2D(1L * cell, 2L * cell, cell, cell));
 
-            botx = cellSize, boty = cellSize * 2,
-
-            leftx = 0, lefty = cellSize,
-
-            rightx = cellSize * 2, righty = cellSize,
-
-            fwdx = cellSize, fwdy = cellSize,
-
-            backx = cellSize * 3, backy = cellSize;
-
-        //add top padding x+, y+, width-, height
-        top.setViewport(new Rectangle2D(topx, topy, cellSize, cellSize));
-
-        //add left padding x, y+, width, height-
-        left.setViewport(new Rectangle2D(leftx, lefty, cellSize - 1, cellSize - 1));
-
-        //add front padding x+, y+, width-, height
-        back.setViewport(new Rectangle2D(fwdx, fwdy, cellSize, cellSize));
-
-        //add right padding x, y+, width, height-
-        right.setViewport(new Rectangle2D(rightx, righty, cellSize, cellSize));
-
-        //add back padding x, y+, width, height-
-        front.setViewport(new Rectangle2D(backx + 1, backy - 1, cellSize - 1, cellSize - 1));
-
-        //add bottom padding x+, y, width-, height-
-        bottom.setViewport(new Rectangle2D(botx, boty, cellSize, cellSize));
-
-        for (ImageView v : views) {
-            v.setImage(singleImg);
-            //System.out.println(v.getId() + v.getViewport() + cellSize);
-        }
+        for (ImageView v : views) v.setImage(singleImg);
     }
 
     private void recalculateSize(double cell) {
         double factor = Math.floor(getSize() / cell);
+        if (factor < 1) factor = 1;
         setSize(cell * factor);
     }
 
     private void setMultipleImages() {
         layoutViews();
 
-        back.setImage(frontImg);
-        front.setImage(backImg);
+        front.setImage(frontImg);
+        back.setImage(backImg);
         top.setImage(topImg);
         bottom.setImage(bottomImg);
         left.setImage(leftImg);
         right.setImage(rightImg);
     }
 
+    // ---------------------------------------------------------------------
+    // Camera follow
+    // ---------------------------------------------------------------------
+
     private void startTimer() {
         timer = new AnimationTimer() {
-            boolean latch = false;
-
             @Override
             public void handle(long now) {
                 Transform ct = (camera != null) ? camera.getLocalToSceneTransform() : null;
@@ -282,46 +241,26 @@ public class Skybox extends Group {
                     affine.setTy(ct.getTy());
                     affine.setTz(ct.getTz());
                 }
-                if (!latch) {
-                    Platform.runLater(() -> {
-                        Glow glow = new Glow(0.9);
-                        for (int i = 0; i < views.length; i++)
-                            views[i].setEffect(glow);
-                    });
-                    latch = true;
-                }
             }
         };
         timer.start();
     }
 
-    /*
-        Properties
-    */
+    /** Stop the internal animation timer (call when tearing down). */
+    public void stop() {
+        if (timer != null) timer.stop();
+    }
+
+    // ---------------------------------------------------------------------
+    // Properties
+    // ---------------------------------------------------------------------
+
     private final DoubleProperty size = new SimpleDoubleProperty() {
         @Override
-        protected void invalidated() {
-            switch (imageType) {
-                case SINGLE:
-                    layoutViews();
-                    break;
-                case MULTIPLE:
-                    break;
-            }
-
-        }
+        protected void invalidated() { layoutViews(); }
     };
 
-    public final double getSize() {
-        return size.get();
-    }
-
-    public final void setSize(double value) {
-        size.set(value);
-    }
-
-    public DoubleProperty sizeProperty() {
-        return size;
-    }
-
+    public final double getSize() { return size.get(); }
+    public final void setSize(double value) { size.set(value); }
+    public DoubleProperty sizeProperty() { return size; }
 }
