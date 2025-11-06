@@ -7,6 +7,7 @@ import AsteroidField.spacecraft.control.ThrusterController;
 import AsteroidField.tether.TetherController;
 import AsteroidField.textures.DebugTextures;
 import AsteroidField.ui.scene3d.CubeAtlas;
+import AsteroidField.ui.scene3d.Grid3D;
 import AsteroidField.ui.scene3d.Skybox;
 import AsteroidField.util.FpsLookController;
 import AsteroidField.util.ResourceUtils;
@@ -63,9 +64,10 @@ public class Game3DView extends Pane {
         camera.setFarClip(200000.0);
         camera.setFieldOfView(45);
         camera.setTranslateZ(-800);
+        camera.setTranslateY(-400);
 
         this.subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.BALANCED);
-        subScene.setFill(Color.BLACK);
+        subScene.setFill(Color.GAINSBORO);
         subScene.setCamera(camera);
 
         getChildren().add(subScene);
@@ -73,36 +75,57 @@ public class Game3DView extends Pane {
         subScene.heightProperty().bind(heightProperty());
 
         // --- Skybox (your existing setup) ---
+        double skySize = 10000D;
         try {
-            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
-            double skySize = 100000D;
+//            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
+//            Image atlas = ResourceUtils.load3DTextureImage("tycho-skybox");
+            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4k_colorC_gaussian_small");
+
 
             //            Skybox sky = new Skybox(atlas, skySize, camera);
 
             
-//// Slice -> six faces
-//CubeAtlas.Faces f = CubeAtlas.slice(atlas);
-//// Build skybox via MULTIPLE path (everything else stays the same)
-//Skybox sky = new Skybox(
-//    f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
-//);
+// Slice -> six faces
+CubeAtlas.Faces f = CubeAtlas.slice(atlas);
+// Build skybox via MULTIPLE path (everything else stays the same)
+Skybox sky = new Skybox(
+    f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
+);
 
-// Force MULTIPLE path with debug faces (e.g., 512x512)
-int s = 1024;
-Image top    = DebugTextures.makeFace("TOP", s);
-Image bottom = DebugTextures.makeFace("BOTTOM", s);
-Image left   = DebugTextures.makeFace("LEFT", s);
-Image right  = DebugTextures.makeFace("RIGHT", s);
-Image front  = DebugTextures.makeFace("FRONT", s);
-Image back   = DebugTextures.makeFace("BACK", s);
-
-Skybox sky = new Skybox(top, bottom, left, right, front, back, skySize, camera);
+//// Force MULTIPLE path with debug faces (e.g., 512x512)
+//int s = 1024;
+//Image top    = DebugTextures.makeFace("TOP", s);
+//Image bottom = DebugTextures.makeFace("BOTTOM", s);
+//Image left   = DebugTextures.makeFace("LEFT", s);
+//Image right  = DebugTextures.makeFace("RIGHT", s);
+//Image front  = DebugTextures.makeFace("FRONT", s);
+//Image back   = DebugTextures.makeFace("BACK", s);
+//
+            
+//Image top    = ResourceUtils.load3DTextureImage("top");
+//Image bottom = ResourceUtils.load3DTextureImage("bottom");
+//Image right   = ResourceUtils.load3DTextureImage("left");
+//Image left  = ResourceUtils.load3DTextureImage("right");
+//Image front  = ResourceUtils.load3DTextureImage("front");
+//Image back   = ResourceUtils.load3DTextureImage("back");
+//
+//Skybox sky = new Skybox(top, bottom, left, right, front, back, skySize, camera);
 
             worldRoot.getChildren().add(sky);
         } catch (IOException ex) {
             System.getLogger(Game3DView.class.getName())
                   .log(System.Logger.Level.ERROR, (String) null, ex);
         }
+        
+Grid3D grid = new Grid3D(skySize, skySize, 100, 100);
+grid.setMajorEvery(10); // thicker line every 10 cells
+grid.setLineColor(Color.color(0.5, 0.5, 1, 0.15));       // subtle
+grid.setMajorLineColor(Color.color(1, 1, 1, 0.6));   // a bit stronger
+grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
+// Optional: grid.setCheckA(Color.color(1,1,1,0.10));
+grid.setCheckB(Color.color(1,1,1,0.05));    
+grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
+worldRoot.getChildren().add(grid);
 
         // --- Physics system (120 Hz) ---
         this.physics = new PhysicsSystem(120);

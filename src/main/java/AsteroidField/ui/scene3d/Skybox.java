@@ -11,7 +11,6 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.transform.Affine;
 import javafx.scene.transform.Transform;
-import javafx.scene.transform.Translate;
 
 /**
  * Cube skybox that follows the camera position.
@@ -94,10 +93,10 @@ public class Skybox extends Group {
 
     private void loadImageViews() {
         for (ImageView iv : views) {
-            iv.setSmooth(false);          // keep nearest while validating
-            iv.setPreserveRatio(false);   // exact SxS faces
+            iv.setSmooth(true);          // keep nearest while validating
+            iv.setPreserveRatio(true);   // exact SxS faces
             iv.setMouseTransparent(true);
-            iv.setDepthTest(DepthTest.ENABLE);
+//            iv.setDepthTest(DepthTest.ENABLE);
         }
         validateImageType();
     }
@@ -118,8 +117,8 @@ private void layoutViews() {
     }
 
     // Canonical outward normals and ups (keep RIGHT and BACK as you have them)
-    orientFace(back,   vec( 0,  0,  1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, +half)
-    orientFace(front,  vec( 0,  0, -1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, -half)
+    orientFace(front,   vec( 0,  0,  1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, +half)
+    orientFace(back,  vec( 0,  0, -1), vec( 0,  1,  0), half, EPS); // center -> (0, 0, -half)
     orientFace(right,  vec( 1,  0,  0), vec( 0,  1,  0), half, EPS); // center -> (+half, 0, 0)
     orientFace(left,   vec(-1,  0,  0), vec( 0,  1,  0), half, EPS); // center -> (-half, 0, 0)
 
@@ -127,8 +126,8 @@ private void layoutViews() {
 //    orientFace(top,    vec( 0,  1,  0), vec( 0,  0, -1), half, EPS); // center -> (0, +half, 0)
 //    orientFace(bottom, vec( 0, -1,  0), vec( 0,  0,  1), half, EPS); // center -> (0, -half, 0)
     
-orientFace(top,    vec( 0, -1,  0), vec( 0,  0, -1), half, EPS);
-orientFace(bottom, vec( 0,  1,  0), vec( 0,  0,  1), half, EPS);
+orientFace(bottom,    vec( 0, -1,  0), vec( 0,  0, -1), half, EPS);
+orientFace(top, vec( 0,  1,  0), vec( 0,  0,  1), half, EPS);
 
 }
 
