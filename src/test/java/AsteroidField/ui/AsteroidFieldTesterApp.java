@@ -1,5 +1,6 @@
-package AsteroidField;
+package AsteroidField.ui;
 
+import AsteroidField.ui.AsteroidField3DView;
 import AsteroidField.css.StyleResourceProvider;
 import AsteroidField.ui.CameraViewOverlay;
 import AsteroidField.ui.CameraViewLite;
@@ -20,7 +21,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
-public class App extends Application {
+public class AsteroidFieldTesterApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {

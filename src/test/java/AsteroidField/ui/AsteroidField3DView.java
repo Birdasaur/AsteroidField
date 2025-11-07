@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.ui;
 
 import AsteroidField.asteroids.AsteroidFamilyUI;
 import AsteroidField.asteroids.AsteroidGenerator;

@@ -1,4 +1,4 @@
-package AsteroidField;
+package AsteroidField.ui;
 
 import javafx.application.Application;
 
@@ -15,6 +15,6 @@ public class AsteroidFieldTesterMain {
      */
     public static void main(String[] args) {
         System.out.println("Entering AsteroidField Tester main...");
-        Application.launch(App.class, args);
+        Application.launch(AsteroidFieldTesterApp.class, args);
     }
 }
