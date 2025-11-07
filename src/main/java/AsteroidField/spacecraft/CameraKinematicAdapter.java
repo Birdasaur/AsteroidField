@@ -1,6 +1,7 @@
 package AsteroidField.spacecraft;
 
 import AsteroidField.physics.KinematicCraft;
+import AsteroidField.physics.PhysicsContributor;
 import AsteroidField.tether.Tether;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
@@ -13,7 +14,7 @@ import javafx.scene.SubScene;
  * Kinematic point-mass adapter around the camera.
  * Accumulates forces and integrates velocity/position each fixed step.
  */
-public class CameraKinematicAdapter implements KinematicCraft, Tether.SpacecraftAdapter {
+public class CameraKinematicAdapter implements KinematicCraft, PhysicsContributor, Tether.SpacecraftAdapter {
 
     private final PerspectiveCamera camera;
     private final Group rig;        // moved by physics
@@ -97,7 +98,8 @@ public class CameraKinematicAdapter implements KinematicCraft, Tether.Spacecraft
     @Override public void applyForce(Point3D force) {
         if (force != null) forceAccum = forceAccum.add(force);
     }
-
+    
+    @Override public void step(double dt) { tick(dt); } 
     // --- Physics integration (fixed dt) ---
     @Override public void tick(double dt) {
         Point3D accel = (mass > 0) ? forceAccum.multiply(1.0 / mass) : Point3D.ZERO;

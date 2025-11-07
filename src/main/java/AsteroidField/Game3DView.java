@@ -1,11 +1,11 @@
 package AsteroidField;
 
 import AsteroidField.physics.PhysicsSystem;
+import AsteroidField.runtime.CollidableRegistry;
 import AsteroidField.spacecraft.CameraKinematicAdapter;
 import AsteroidField.spacecraft.collision.SpacecraftCollisionContributor;
 import AsteroidField.spacecraft.control.ThrusterController;
 import AsteroidField.tether.TetherController;
-import AsteroidField.textures.DebugTextures;
 import AsteroidField.ui.scene3d.CubeAtlas;
 import AsteroidField.ui.scene3d.Grid3D;
 import AsteroidField.ui.scene3d.Skybox;
@@ -50,10 +50,15 @@ public class Game3DView extends Pane {
     private final SpacecraftCollisionContributor shipCollisions;
 
     // View controls
-    private final FpsLookController fpsLook; // NEW
+    private final FpsLookController fpsLook; 
 
     // Optional craft proxy we can show/hide while docking
     private Node craftProxy;
+    
+    // supplier for tethers & collisions:
+    private CollidableRegistry collidablesRegistry;
+    // supplier for tethers & collisions:
+    Supplier<List<Node>> collidableSupplier;    
 
     public Game3DView() {
         // --- World root + camera + subscene ---
@@ -79,11 +84,8 @@ public class Game3DView extends Pane {
         try {
 //            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
 //            Image atlas = ResourceUtils.load3DTextureImage("tycho-skybox");
-            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4k_variant3");
-
-
+            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4x3");
             //            Skybox sky = new Skybox(atlas, skySize, camera);
-
             
 // Slice -> six faces
 CubeAtlas.Faces f = CubeAtlas.slice(atlas);
@@ -91,17 +93,7 @@ CubeAtlas.Faces f = CubeAtlas.slice(atlas);
 Skybox sky = new Skybox(
     f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
 );
-
-//// Force MULTIPLE path with debug faces (e.g., 512x512)
-//int s = 1024;
-//Image top    = DebugTextures.makeFace("TOP", s);
-//Image bottom = DebugTextures.makeFace("BOTTOM", s);
-//Image left   = DebugTextures.makeFace("LEFT", s);
-//Image right  = DebugTextures.makeFace("RIGHT", s);
-//Image front  = DebugTextures.makeFace("FRONT", s);
-//Image back   = DebugTextures.makeFace("BACK", s);
-//
-            
+           
 //Image top    = ResourceUtils.load3DTextureImage("top");
 //Image bottom = ResourceUtils.load3DTextureImage("bottom");
 //Image right   = ResourceUtils.load3DTextureImage("left");
@@ -117,15 +109,15 @@ Skybox sky = new Skybox(
                   .log(System.Logger.Level.ERROR, (String) null, ex);
         }
         
-Grid3D grid = new Grid3D(skySize, skySize, 100, 100);
-grid.setMajorEvery(10); // thicker line every 10 cells
-grid.setLineColor(Color.color(0.5, 0.5, 1, 0.15));       // subtle
-grid.setMajorLineColor(Color.color(1, 1, 1, 0.6));   // a bit stronger
-//grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
-// Optional: grid.setCheckA(Color.color(1,1,1,0.10));
-grid.setCheckB(Color.color(1,1,1,0.05));    
-grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
-worldRoot.getChildren().add(grid);
+        Grid3D grid = new Grid3D(skySize, skySize, 100, 100);
+        grid.setMajorEvery(10); // thicker line every 10 cells
+        grid.setLineColor(Color.color(0.5, 0.5, 1, 0.15));       // subtle
+        grid.setMajorLineColor(Color.color(1, 1, 1, 0.6));   // a bit stronger
+        //grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
+        // Optional: grid.setCheckA(Color.color(1,1,1,0.10));
+        grid.setCheckB(Color.color(1,1,1,0.05));    
+        grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
+        worldRoot.getChildren().add(grid);
 
         // --- Physics system (120 Hz) ---
         this.physics = new PhysicsSystem(120);
@@ -137,8 +129,10 @@ worldRoot.getChildren().add(grid);
         craft.setLinearDampingPerSecond(0.18);
         craft.setMaxSpeed(650);
 
-        // --- Collidables supplier (empty for now; replace when we spawn asteroids) ---
-        Supplier<List<Node>> collidables = () -> Collections.emptyList();
+        // --- Collidables supplier initialization ---
+//        Supplier<List<Node>> collidables = () -> Collections.emptyList();
+        collidablesRegistry = new CollidableRegistry();
+        collidableSupplier = () -> collidablesRegistry.getCollidables();    
 
         // --- Thrusters (physics contributor) ---
         this.thrusters = new ThrusterController(subScene, camera, craft);
@@ -150,7 +144,7 @@ worldRoot.getChildren().add(grid);
         thrusters.setLookSensitivity(0.0); // mouse-look handled by fpsLook
 
         // --- Tethers (physics contributor + input handler gated externally) ---
-        this.tethers = new TetherController(subScene, camera, worldRoot, collidables, craft);
+        tethers = new TetherController(subScene, camera, worldRoot, collidableSupplier, craft);
         tethers.setSymmetricWingOffsets(20, 50, 5);
         tethers.setTetherInputEnabled(false); // toggle from UI when ready
         for (int i = 0; i < 2; i++) {
@@ -169,18 +163,20 @@ worldRoot.getChildren().add(grid);
         }
 
         // --- Spacecraft collisions (physics contributor) ---
-        this.shipCollisions = new SpacecraftCollisionContributor(worldRoot, craft, collidables, 1.5);
+        shipCollisions = new SpacecraftCollisionContributor(worldRoot, craft, collidableSupplier, 1.5);
         shipCollisions.setFrontFaceOnly(true);
         shipCollisions.setMaxIterations(2);
         shipCollisions.setRestitution(0.05);
         shipCollisions.setFriction(0.15);
 
         // --- Register contributors with physics ---
+        //Order matters! spacecraft should have all forces accumulated before it integrates
         physics.addContributor(thrusters);
         physics.addContributor(tethers);
         physics.addContributor(shipCollisions);
+        physics.addContributor(craft);
 
-        // --- FPS mouse-look (NEW) ---
+        // --- FPS mouse-look ---
         this.fpsLook = new FpsLookController(subScene, camera);
         fpsLook.setEnabled(true);
         fpsLook.setSensitivity(0.20);
@@ -201,6 +197,18 @@ worldRoot.getChildren().add(grid);
     public ThrusterController getThrusters() { return thrusters; }
     public TetherController getTethers() { return tethers; }
     public SpacecraftCollisionContributor getShipCollisions() { return shipCollisions; }
+    public void addCollidable(Node n) {
+        if (n != null) {
+            worldRoot.getChildren().add(n);
+            collidablesRegistry.add(n);
+        }
+    }
+    public void removeCollidable(Node n) {
+        if (n != null) {
+            worldRoot.getChildren().remove(n);
+            collidablesRegistry.remove(n);
+        }
+    }
 
     // ---------- View control helpers ----------
     public FpsLookController getFpsLook() { return fpsLook; }
