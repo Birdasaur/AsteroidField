@@ -79,7 +79,7 @@ public class Game3DView extends Pane {
         try {
 //            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
 //            Image atlas = ResourceUtils.load3DTextureImage("tycho-skybox");
-            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4k_colorC_gaussian_small");
+            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4k_variant3");
 
 
             //            Skybox sky = new Skybox(atlas, skySize, camera);
@@ -121,7 +121,7 @@ Grid3D grid = new Grid3D(skySize, skySize, 100, 100);
 grid.setMajorEvery(10); // thicker line every 10 cells
 grid.setLineColor(Color.color(0.5, 0.5, 1, 0.15));       // subtle
 grid.setMajorLineColor(Color.color(1, 1, 1, 0.6));   // a bit stronger
-grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
+//grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
 // Optional: grid.setCheckA(Color.color(1,1,1,0.10));
 grid.setCheckB(Color.color(1,1,1,0.05));    
 grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
