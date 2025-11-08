@@ -36,7 +36,7 @@ public class StarfieldWorkbenchApp extends Application {
                 fc.setInitialFileName("stars_atlas-4k.png");
                 File f = fc.showSaveDialog(stage);
                 if (f != null) {
-                    StarAtlasGenerator.savePng(img, f);
+                    StarAtlasGenerator.savePngFlattened(img, f);
                     System.out.println("Saved RAW atlas: " + f.getAbsolutePath()
                             + " (" + (int)img.getWidth() + "×" + (int)img.getHeight() + ")");
                 }
@@ -75,7 +75,7 @@ public class StarfieldWorkbenchApp extends Application {
                 fc.setInitialFileName("stars_preview.png");
                 File f = fc.showSaveDialog(stage);
                 if (f != null) {
-                    StarAtlasGenerator.savePng(img, f);
+                    StarAtlasGenerator.savePngFlattened(img, f);
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();

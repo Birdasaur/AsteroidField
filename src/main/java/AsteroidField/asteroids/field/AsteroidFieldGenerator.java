@@ -19,7 +19,7 @@ import javafx.scene.shape.TriangleMesh;
 import javafx.scene.transform.Rotate;
 
 /**
- * Synchronous field generator. Call build(...) on a background thread for heavy scenes,
+ * Synchronous field generator. Call build() on a background thread for heavy scenes,
  * then attach the returned field.root to your scene on the FX thread.
  */
 public final class AsteroidFieldGenerator {

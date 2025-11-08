@@ -12,7 +12,6 @@ import AsteroidField.ui.scene3d.Skybox;
 import AsteroidField.util.FpsLookController;
 import AsteroidField.util.ResourceUtils;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 import javafx.scene.Group;
@@ -80,11 +79,11 @@ public class Game3DView extends Pane {
         subScene.heightProperty().bind(heightProperty());
 
         // --- Skybox (your existing setup) ---
-        double skySize = 10000D;
+        double skySize = 100000D;
         try {
 //            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
 //            Image atlas = ResourceUtils.load3DTextureImage("tycho-skybox");
-            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas_4x3");
+            Image atlas = ResourceUtils.load3DTextureImage("stars_atlas-4k");
             //            Skybox sky = new Skybox(atlas, skySize, camera);
             
 // Slice -> six faces
