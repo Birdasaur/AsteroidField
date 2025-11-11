@@ -9,6 +9,7 @@ import AsteroidField.tether.TetherController;
 import AsteroidField.ui.scene3d.CubeAtlas;
 import AsteroidField.ui.scene3d.Grid3D;
 import AsteroidField.ui.scene3d.Skybox;
+import AsteroidField.ui.scene3d.SphericalSkybox;
 import AsteroidField.util.FpsLookController;
 import AsteroidField.util.ResourceUtils;
 import java.io.IOException;
@@ -78,31 +79,26 @@ public class Game3DView extends Pane {
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
 
-        // --- Skybox (your existing setup) ---
-        double skySize = 100000D;
+        // --- Skybox ---
+        double skySize = 10000D;
         try {
 //            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
-//            Image atlas = ResourceUtils.load3DTextureImage("tycho-skybox");
             Image atlas = ResourceUtils.load3DTextureImage("stars_atlas-4k");
-            //            Skybox sky = new Skybox(atlas, skySize, camera);
+            // Slice -> six faces
+            CubeAtlas.Faces f = CubeAtlas.slice(atlas);
             
-// Slice -> six faces
-CubeAtlas.Faces f = CubeAtlas.slice(atlas);
-// Build skybox via MULTIPLE path (everything else stays the same)
-Skybox sky = new Skybox(
-    f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
-);
-           
-//Image top    = ResourceUtils.load3DTextureImage("top");
-//Image bottom = ResourceUtils.load3DTextureImage("bottom");
-//Image right   = ResourceUtils.load3DTextureImage("left");
-//Image left  = ResourceUtils.load3DTextureImage("right");
-//Image front  = ResourceUtils.load3DTextureImage("front");
-//Image back   = ResourceUtils.load3DTextureImage("back");
-//
-//Skybox sky = new Skybox(top, bottom, left, right, front, back, skySize, camera);
+            // Build skybox via MULTIPLE path (everything else stays the same)
+            Skybox sky = new Skybox(
+                f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
+            );
+            worldRoot.getChildren().add(0, sky);
+            
+//// inside your 3D setup code:
+//Image spaceEQ = ResourceUtils.load3DTextureImage("tycho-skymap"); // 2:1 texture
+//double radius = camera.getFarClip() * 0.45; // keep comfortably within far plane
+//SphericalSkybox skysphere = new SphericalSkybox(spaceEQ, radius, camera);
+//worldRoot.getChildren().add(0, skysphere);            
 
-            worldRoot.getChildren().add(sky);
         } catch (IOException ex) {
             System.getLogger(Game3DView.class.getName())
                   .log(System.Logger.Level.ERROR, (String) null, ex);
