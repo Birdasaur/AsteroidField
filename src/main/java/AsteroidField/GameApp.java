@@ -1,17 +1,27 @@
 package AsteroidField;
 
+import AsteroidField.asteroids.field.families.FamilyPool;
+import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
+import AsteroidField.asteroids.field.placement.BeltPlacementStrategy;
+import AsteroidField.asteroids.field.placement.PlacementStrategy;
+import AsteroidField.asteroids.providers.AsteroidMeshProvider;
 import AsteroidField.audio.SfxPlayer;
 import AsteroidField.events.AudioEvent;
 import AsteroidField.events.SfxEvent;
 import AsteroidField.runtime.DockingController;
 import AsteroidField.runtime.DockingModeController;
+import AsteroidField.runtime.WorldBuilder;
 import AsteroidField.spacecraft.FancyCraft;
 import AsteroidField.ui.overlay.OverlayController;
+import java.util.ArrayList;
+import java.util.List;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.SceneAntialiasing;
+import static javafx.scene.input.KeyCode.F10;
+import static javafx.scene.input.KeyCode.F9;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
@@ -31,6 +41,10 @@ public class GameApp extends Application {
     DockingModeController dockingModeController;
     SfxPlayer sfx;
     FancyCraft fancyCraft;
+    WorldBuilder worldBuilder;
+    WorldBuilder.Handle fieldHandle;
+    FamilyPool familyPool;
+    PlacementStrategy placement;
 
     @Override
     public void start(Stage stage) {
@@ -41,6 +55,23 @@ public class GameApp extends Application {
 
         // --- Center stack: 3D + overlays ---
         Game3DView gameView = new Game3DView();
+        // --- WorldBuilder demo: families + placement ---
+        worldBuilder = new WorldBuilder(gameView);
+
+// Build weighted entries from all registered providers (defaults: enabled=true, weight=1.0)
+List<WeightedFamilyEntry> entries = new ArrayList<>();
+AsteroidMeshProvider.PROVIDERS.values().forEach(p -> {
+    WeightedFamilyEntry e = new WeightedFamilyEntry(p);
+    // Optional explicitness:
+    // e.enabledProperty().set(true);
+    // e.weightProperty().set(1.0);
+    entries.add(e);
+});
+familyPool = new FamilyPool(entries);
+
+// Placement: belt with its built-in defaults (no public setters)
+placement = new BeltPlacementStrategy();
+
 
         // TEMP craft proxy so you can see hide/show immediately.
         // Remove once your real craft rig is wired up.
@@ -130,6 +161,27 @@ scene.setOnKeyPressed(e -> {
             boolean allow = !gameView.getTethers().isTetherInputEnabled();
             gameView.getTethers().setTetherInputEnabled(allow);
         }
+        case F9 -> {
+            // Clear any prior field first
+            if (fieldHandle != null) { fieldHandle.detach(); fieldHandle = null; }
+
+            // High-count config using our helper
+            var cfg = WorldBuilder.defaultHighCountConfig();
+            cfg.count = 150;            // try 150–250 for stress; prototypes on for perf
+            cfg.usePrototypes = true;
+            cfg.prototypeCount = 48;
+cfg.baseColor = Color.LIGHTGRAY;
+
+            fieldHandle = worldBuilder.buildAndAttach(familyPool, placement, cfg);
+            System.out.println("Spawned: " + fieldHandle.getField().instances.size() + " asteroids");
+        }
+        case F10 -> {
+            if (fieldHandle != null) {
+                fieldHandle.detach();
+                fieldHandle = null;
+                System.out.println("Cleared field.");
+            }
+        }      
         default -> { /* noop */ }
     }
 });

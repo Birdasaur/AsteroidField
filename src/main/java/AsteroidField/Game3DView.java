@@ -15,9 +15,11 @@ import AsteroidField.util.ResourceUtils;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.Supplier;
+import javafx.scene.AmbientLight;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.PerspectiveCamera;
+import javafx.scene.PointLight;
 import javafx.scene.SceneAntialiasing;
 import javafx.scene.SubScene;
 import javafx.scene.image.Image;
@@ -71,16 +73,16 @@ public class Game3DView extends Pane {
         camera.setTranslateZ(-800);
         camera.setTranslateY(-400);
 
-        this.subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.BALANCED);
+        subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.BALANCED);
         subScene.setFill(Color.GAINSBORO);
         subScene.setCamera(camera);
-
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
         subScene.heightProperty().bind(heightProperty());
 
+        
         // --- Skybox ---
-        double skySize = 10000D;
+        double skySize = 100000D;
         try {
 //            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
             Image atlas = ResourceUtils.load3DTextureImage("stars_atlas-4k");
@@ -124,6 +126,15 @@ public class Game3DView extends Pane {
         craft.setLinearDampingPerSecond(0.18);
         craft.setMaxSpeed(650);
 
+        // inside Game3DView constructor, AFTER you create worldRoot:
+        AmbientLight amb = new AmbientLight(Color.color(1, 1, 1));
+        worldRoot.getChildren().add(amb);
+
+//        // ... after you create `craft = CameraKinematicAdapter.attach(...)`:
+//        PointLight head = new PointLight(Color.color(1, 1, 1, 0.85));
+//        getCraft().getRigNode().getChildren().add(head);        
+        
+        
         // --- Collidables supplier initialization ---
 //        Supplier<List<Node>> collidables = () -> Collections.emptyList();
         collidablesRegistry = new CollidableRegistry();
