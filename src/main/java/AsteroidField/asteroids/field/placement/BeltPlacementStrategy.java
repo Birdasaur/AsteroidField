@@ -16,16 +16,35 @@ import javafx.scene.layout.GridPane;
 /**
  * Annular "belt" placement. Samples area-uniformly in XY annulus and Gaussian thickness in Z.
  * Optional Poisson-disk min separation in 3D to avoid overlaps.
+ *
+ * Extended: optional ellipse scaling in XY, orientation (yaw/pitch/roll), and world offset.
+ * Defaults keep original behavior (circle ring in XY, centered at origin).
  */
 public final class BeltPlacementStrategy implements PlacementStrategy {
+    // Core belt parameters
     private final DoubleProperty rMin = new SimpleDoubleProperty(5000);
     private final DoubleProperty rMax = new SimpleDoubleProperty(8000);
-    private final DoubleProperty thickness = new SimpleDoubleProperty(400);     // 1σ vertical
+    private final DoubleProperty thickness = new SimpleDoubleProperty(1000);     // 1σ vertical
     private final DoubleProperty minSeparation = new SimpleDoubleProperty(0);   // 0 disables Poisson
     private final DoubleProperty baseScale = new SimpleDoubleProperty(1.0);     // uniform pre-scale
 
+    // New: ellipse shape in XY (1,1 == circle)
+    private final DoubleProperty scaleX = new SimpleDoubleProperty(1.0);
+    private final DoubleProperty scaleY = new SimpleDoubleProperty(1.0);
+
+    // New: orientation (degrees). yaw = about +Z, pitch = about +X, roll = about +Y
+    private final DoubleProperty yawDeg   = new SimpleDoubleProperty(0.0);
+    private final DoubleProperty pitchDeg = new SimpleDoubleProperty(0.0);
+    private final DoubleProperty rollDeg  = new SimpleDoubleProperty(0.0);
+
+    // New: world offset
+    private final DoubleProperty centerX = new SimpleDoubleProperty(0.0);
+    private final DoubleProperty centerY = new SimpleDoubleProperty(0.0);
+    private final DoubleProperty centerZ = new SimpleDoubleProperty(0.0);
+
     @Override public String getName() { return "Belt / Ring"; }
 
+    // --- Controls (kept minimal; the debug pane will expose the new settings) ---
     @Override
     public Node getControls() {
         GridPane gp = new GridPane(); gp.setHgap(6); gp.setVgap(6);
@@ -58,19 +77,55 @@ public final class BeltPlacementStrategy implements PlacementStrategy {
                 ? poissonAnnulus(count, r0, r1, sigmaZ, sep, rng)
                 : jitteredAnnulus(count, r0, r1, sigmaZ, rng);
 
+        // Precompute rotation matrix from yaw/pitch/roll
+        double cy = Math.cos(Math.toRadians(yawDeg.get()));
+        double sy = Math.sin(Math.toRadians(yawDeg.get()));
+        double cp = Math.cos(Math.toRadians(pitchDeg.get()));
+        double sp = Math.sin(Math.toRadians(pitchDeg.get()));
+        double cr = Math.cos(Math.toRadians(rollDeg.get()));
+        double sr = Math.sin(Math.toRadians(rollDeg.get()));
+
+        // R = Rz(yaw) * Rx(pitch) * Ry(roll)  (any consistent order is fine; keep stable)
+        // Multiply vector v by R with helper mulR(...)
+        double[][] R = new double[][]{
+            { cy*cr + sy*sp*sr,  sy*sp*cr - cy*sr,  sy*cp },
+            { sr*cp,              cr*cp,            -sp    },
+            { cy*sr*sp - sy*cr,  sy*sr + cy*sp*cr,  cy*cp }
+        };
+
         List<Placement> out = new ArrayList<Placement>(count);
-        for (Point3D p : pts) {
-            // Tangential forward in XY plane; Up = global +Z
-            Point3D radial = new Point3D(p.getX(), p.getY(), 0);
-            Point3D f = new Point3D(-radial.getY(), radial.getX(), 0); // CCW tangent
-            Point3D u = new Point3D(0, 0, 1);
-            out.add(new Placement(p, f, u, baseScale.get()));
+        for (Point3D p0 : pts) {
+            // 1) ellipse scaling in XY
+            double x = p0.getX() * scaleX.get();
+            double y = p0.getY() * scaleY.get();
+            double z = p0.getZ();
+
+            // 2) build local forward/up before rotation: tangent in XY, up = +Z
+            Point3D radial = new Point3D(x, y, 0);
+            Point3D fLocal = new Point3D(-radial.getY(), radial.getX(), 0); // CCW tangent
+            Point3D uLocal = new Point3D(0, 0, 1);
+
+            // 3) rotate position and basis
+            Point3D pR = mulR(R, new Point3D(x, y, z));
+            Point3D fR = mulR(R, fLocal).normalize();
+            Point3D uR = mulR(R, uLocal).normalize();
+
+            // 4) translate to center
+            Point3D pW = pR.add(centerX.get(), centerY.get(), centerZ.get());
+
+            out.add(new Placement(pW, fR, uR, baseScale.get()));
         }
         return out;
     }
 
-    // --- sampling helpers ---
+    private static Point3D mulR(double[][] R, Point3D v) {
+        double nx = R[0][0]*v.getX() + R[0][1]*v.getY() + R[0][2]*v.getZ();
+        double ny = R[1][0]*v.getX() + R[1][1]*v.getY() + R[1][2]*v.getZ();
+        double nz = R[2][0]*v.getX() + R[2][1]*v.getY() + R[2][2]*v.getZ();
+        return new Point3D(nx, ny, nz);
+    }
 
+    // --- sampling helpers ---
     private static List<Point3D> jitteredAnnulus(int n, double r0, double r1, double sigmaZ, Random rng) {
         List<Point3D> pts = new ArrayList<Point3D>(n);
         for (int i = 0; i < n; i++) {
@@ -116,7 +171,6 @@ public final class BeltPlacementStrategy implements PlacementStrategy {
                     if (samples.size() >= target) break;
                 }
             }
-            // if not found, p leaves active set
         }
         // Rare top-up
         Random topRng = new Random(rng.nextLong());
@@ -152,4 +206,58 @@ public final class BeltPlacementStrategy implements PlacementStrategy {
                 }
         return true;
     }
+
+    // --- Public API (getters/setters/properties) ---
+
+    public double getInnerRadius() { return rMin.get(); }
+    public void setInnerRadius(double v) { rMin.set(v); }
+    public DoubleProperty innerRadiusProperty() { return rMin; }
+
+    public double getOuterRadius() { return rMax.get(); }
+    public void setOuterRadius(double v) { rMax.set(v); }
+    public DoubleProperty outerRadiusProperty() { return rMax; }
+
+    public double getThicknessSigma() { return thickness.get(); }
+    public void setThicknessSigma(double v) { thickness.set(v); }
+    public DoubleProperty thicknessSigmaProperty() { return thickness; }
+
+    public double getMinSeparation() { return minSeparation.get(); }
+    public void setMinSeparation(double v) { minSeparation.set(v); }
+    public DoubleProperty minSeparationProperty() { return minSeparation; }
+
+    public double getBaseScale() { return baseScale.get(); }
+    public void setBaseScale(double v) { baseScale.set(v); }
+    public DoubleProperty baseScaleProperty() { return baseScale; }
+
+    public double getScaleX() { return scaleX.get(); }
+    public void setScaleX(double v) { scaleX.set(v); }
+    public DoubleProperty scaleXProperty() { return scaleX; }
+
+    public double getScaleY() { return scaleY.get(); }
+    public void setScaleY(double v) { scaleY.set(v); }
+    public DoubleProperty scaleYProperty() { return scaleY; }
+
+    public double getYawDeg() { return yawDeg.get(); }
+    public void setYawDeg(double v) { yawDeg.set(v); }
+    public DoubleProperty yawDegProperty() { return yawDeg; }
+
+    public double getPitchDeg() { return pitchDeg.get(); }
+    public void setPitchDeg(double v) { pitchDeg.set(v); }
+    public DoubleProperty pitchDegProperty() { return pitchDeg; }
+
+    public double getRollDeg() { return rollDeg.get(); }
+    public void setRollDeg(double v) { rollDeg.set(v); }
+    public DoubleProperty rollDegProperty() { return rollDeg; }
+
+    public double getCenterX() { return centerX.get(); }
+    public void setCenterX(double v) { centerX.set(v); }
+    public DoubleProperty centerXProperty() { return centerX; }
+
+    public double getCenterY() { return centerY.get(); }
+    public void setCenterY(double v) { centerY.set(v); }
+    public DoubleProperty centerYProperty() { return centerY; }
+
+    public double getCenterZ() { return centerZ.get(); }
+    public void setCenterZ(double v) { centerZ.set(v); }
+    public DoubleProperty centerZProperty() { return centerZ; }
 }

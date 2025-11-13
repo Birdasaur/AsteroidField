@@ -70,8 +70,9 @@ AsteroidMeshProvider.PROVIDERS.values().forEach(p -> {
 familyPool = new FamilyPool(entries);
 
 // Placement: belt with its built-in defaults (no public setters)
-placement = new BeltPlacementStrategy();
-
+BeltPlacementStrategy belt = new BeltPlacementStrategy();
+//belt.setThicknessSigma(0);
+placement = belt;
 
         // TEMP craft proxy so you can see hide/show immediately.
         // Remove once your real craft rig is wired up.
@@ -167,10 +168,11 @@ scene.setOnKeyPressed(e -> {
 
             // High-count config using our helper
             var cfg = WorldBuilder.defaultHighCountConfig();
-            cfg.count = 150;            // try 150–250 for stress; prototypes on for perf
-            cfg.usePrototypes = true;
-            cfg.prototypeCount = 48;
-cfg.baseColor = Color.LIGHTGRAY;
+            cfg.count = 500; // higher count requires higher vram; 
+            cfg.subdivisionsMax = 1;
+            cfg.usePrototypes = true; //prototypes on for performance improvements
+            cfg.prototypeCount = 20; //higher prototype count improves variability at cost of performance
+//cfg.baseColor = Color.GRAY;
 
             fieldHandle = worldBuilder.buildAndAttach(familyPool, placement, cfg);
             System.out.println("Spawned: " + fieldHandle.getField().instances.size() + " asteroids");

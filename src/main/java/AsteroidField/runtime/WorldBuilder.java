@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Objects;
 import javafx.application.Platform;
 import javafx.scene.shape.MeshView;
+import lit.litfx.core.utils.Utils;
 
 /**
  * Thin adapter around AsteroidFieldGenerator that:
@@ -74,9 +75,13 @@ public final class WorldBuilder {
         Objects.requireNonNull(cfg, "cfg");
 
         // 1) Generate (synchronously)
+        System.out.println("Generating " + cfg.count + " asteroids using " 
+            + cfg.prototypeCount +  " prototypes.");
+        long startTime = System.nanoTime();
         AsteroidFieldGenerator gen = new AsteroidFieldGenerator(families, placement);
         AsteroidField field = gen.build(cfg);
-
+        Utils.printTotalTime(startTime);
+        
         // 2) Attach to world
         view.getWorldRoot().getChildren().add(field.root);
 
@@ -107,7 +112,7 @@ public final class WorldBuilder {
         cfg.subdivisionsMin = 1;
         cfg.subdivisionsMax = 3;
         cfg.deformationMin = 0.15;
-        cfg.deformationMax = 0.45;
+        cfg.deformationMax = 0.35;
 
         // Prototype reuse = fewer mesh allocations for 100+ bodies
         cfg.usePrototypes = true;

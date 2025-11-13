@@ -15,6 +15,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.MeshView;
+import javafx.scene.shape.Sphere;
 import javafx.scene.shape.TriangleMesh;
 import javafx.scene.transform.Rotate;
 
@@ -98,11 +99,12 @@ public final class AsteroidFieldGenerator {
                 );
                 mesh = picked.generateMesh(params);
             }
-
             MeshView mv = new MeshView(mesh);
+            mv.setMouseTransparent(true);
+            mv.setPickOnBounds(false);
             mv.setCullFace(CullFace.BACK);
             mv.setMaterial(sharedMat); // tweak per-instance if desired
-
+            
             // Placement
             Point3D pos = pl.getPosition();
             mv.setTranslateX(pos.getX());

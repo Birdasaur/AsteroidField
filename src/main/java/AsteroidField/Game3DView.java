@@ -9,7 +9,6 @@ import AsteroidField.tether.TetherController;
 import AsteroidField.ui.scene3d.CubeAtlas;
 import AsteroidField.ui.scene3d.Grid3D;
 import AsteroidField.ui.scene3d.Skybox;
-import AsteroidField.ui.scene3d.SphericalSkybox;
 import AsteroidField.util.FpsLookController;
 import AsteroidField.util.ResourceUtils;
 import java.io.IOException;
@@ -73,8 +72,10 @@ public class Game3DView extends Pane {
         camera.setTranslateZ(-800);
         camera.setTranslateY(-400);
 
-        subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.BALANCED);
-        subScene.setFill(Color.GAINSBORO);
+        subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.DISABLED);
+        worldRoot.setMouseTransparent(true);
+        
+        subScene.setFill(Color.DARKSLATEGREY);
         subScene.setCamera(camera);
         getChildren().add(subScene);
         subScene.widthProperty().bind(widthProperty());
@@ -84,7 +85,6 @@ public class Game3DView extends Pane {
         // --- Skybox ---
         double skySize = 100000D;
         try {
-//            Image atlas = ResourceUtils.load3DTextureImage("planar-skybox");
             Image atlas = ResourceUtils.load3DTextureImage("stars_atlas-4k");
             // Slice -> six faces
             CubeAtlas.Faces f = CubeAtlas.slice(atlas);
@@ -111,9 +111,8 @@ public class Game3DView extends Pane {
         grid.setLineColor(Color.color(0.5, 0.5, 1, 0.15));       // subtle
         grid.setMajorLineColor(Color.color(1, 1, 1, 0.6));   // a bit stronger
         //grid.setMeshStyle(Grid3D.Style.CHECKERBOARD);
-        // Optional: grid.setCheckA(Color.color(1,1,1,0.10));
-        grid.setCheckB(Color.color(1,1,1,0.05));    
-        grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
+//        grid.setCheckB(Color.color(1,1,1,0.05));    
+//        grid.setCheckA(Color.LIGHTSLATEGREY.deriveColor(1, 1, 1, 0.1));
         worldRoot.getChildren().add(grid);
 
         // --- Physics system (120 Hz) ---
@@ -136,7 +135,6 @@ public class Game3DView extends Pane {
         
         
         // --- Collidables supplier initialization ---
-//        Supplier<List<Node>> collidables = () -> Collections.emptyList();
         collidablesRegistry = new CollidableRegistry();
         collidableSupplier = () -> collidablesRegistry.getCollidables();    
 
