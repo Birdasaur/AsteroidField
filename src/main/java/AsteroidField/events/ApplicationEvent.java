@@ -18,9 +18,14 @@ public class ApplicationEvent extends Event {
     public static final EventType<ApplicationEvent> ANY =
             new EventType<>(Event.ANY, "APPLICATION_EVENT");
 
-    /** Example event types for overlay management. */
+    /** event types for overlay management. */
     public static final EventType<ApplicationEvent> SHOW_TEXT_CONSOLE = new EventType<>(ANY, "SHOW_TEXT_CONSOLE");
     public static final EventType<ApplicationEvent> CLOSE_TEXT_CONSOLE = new EventType<>(ANY, "CLOSE_TEXT_CONSOLE");
+public static final EventType<ApplicationEvent> SHOW_ASTEROID_LOD = new EventType<>(ANY, "SHOW_ASTEROID_LOD");
+public static final EventType<ApplicationEvent> CLOSE_ASTEROID_LOD = new EventType<>(ANY, "CLOSE_ASTEROID_LOD");
+    public static final EventType<ApplicationEvent> SHOW_FIELD_MANAGER = new EventType<>(ANY, "SHOW_FIELD_MANAGER");
+    public static final EventType<ApplicationEvent> CLOSE_FIELD_MANAGER = new EventType<>(ANY, "CLOSE_FIELD_MANAGER");
+
     public static final EventType<ApplicationEvent> SHOW_BUSY_INDICATOR = new EventType(ANY, "SHOW_BUSY_INDICATOR");
     public static final EventType<ApplicationEvent> HIDE_BUSY_INDICATOR = new EventType(ANY, "HIDE_BUSY_INDICATOR");
     public static final EventType<ApplicationEvent> UPDATE_BUSY_INDICATOR = new EventType(ANY, "PROGRESS_BUSY_INDICATOR");

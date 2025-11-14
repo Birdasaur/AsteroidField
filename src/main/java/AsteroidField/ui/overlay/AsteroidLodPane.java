@@ -43,15 +43,12 @@ public class AsteroidLodPane extends LitPathPane {
     private final TextArea statsArea = new TextArea();
 
     private final AsteroidLodManager lod;
-    private final Supplier<String> statsSupplier;
 
     // Pane sizing
     private static final int PANE_WIDTH = 420;
     private static final int PANE_HEIGHT = 420;
 
-    public AsteroidLodPane(Scene scene, Pane overlayDesktop,
-                           AsteroidLodManager lod,
-                           Supplier<String> statsSupplier) {
+    public AsteroidLodPane(Scene scene, Pane overlayDesktop, AsteroidLodManager lod) {
         super(scene, overlayDesktop,
               PANE_WIDTH, PANE_HEIGHT,
               buildContent(),
@@ -59,7 +56,6 @@ public class AsteroidLodPane extends LitPathPane {
               250.0, 350.0);
 
         this.lod = Objects.requireNonNull(lod, "lod");
-        this.statsSupplier = (statsSupplier != null) ? statsSupplier : () -> "N/A";
 
         // Initial UI values from manager (adjust names to your API if different)
         trySet(() -> enabledChk.setSelected(lod.isEnabled()));
@@ -67,7 +63,7 @@ public class AsteroidLodPane extends LitPathPane {
         trySet(() -> midS.setValue(lod.getMidDistance()));
         trySet(() -> hystS.setValue(lod.getHysteresis()));
         trySet(() -> budgetS.setValue(lod.getBudgetPerFrame()));
-        trySet(() -> coneS.setValue(lod.getForwardConeDeg()));
+        trySet(() -> coneS.setValue(lod.getForwardConeDegrees()));
         trySet(() -> tintChk.setSelected(lod.isTintByTierEnabled()));
         trySet(() -> onScreenOnlyChk.setSelected(lod.isOnScreenOnly()));
 
@@ -123,7 +119,7 @@ public class AsteroidLodPane extends LitPathPane {
         // Periodic refresh of stats
         var statsRefresh = new javafx.animation.Timeline(
             new javafx.animation.KeyFrame(javafx.util.Duration.millis(250),
-                e -> statsArea.setText(safeGet(statsSupplier)))
+                e -> statsArea.setText(lod.debugSummary()))
         );
         statsRefresh.setCycleCount(javafx.animation.Animation.INDEFINITE);
         statsRefresh.play();

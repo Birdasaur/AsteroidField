@@ -1,5 +1,6 @@
 package AsteroidField;
 
+import AsteroidField.asteroids.AsteroidLodManager;
 import AsteroidField.asteroids.field.families.FamilyPool;
 import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
 import AsteroidField.asteroids.field.placement.BeltPlacementStrategy;
@@ -45,6 +46,7 @@ public class GameApp extends Application {
     WorldBuilder.Handle fieldHandle;
     FamilyPool familyPool;
     PlacementStrategy placement;
+    AsteroidLodManager lodManager;
 
     @Override
     public void start(Stage stage) {
@@ -58,22 +60,32 @@ public class GameApp extends Application {
         // --- WorldBuilder demo: families + placement ---
         worldBuilder = new WorldBuilder(gameView);
 
-// Build weighted entries from all registered providers (defaults: enabled=true, weight=1.0)
-List<WeightedFamilyEntry> entries = new ArrayList<>();
-AsteroidMeshProvider.PROVIDERS.values().forEach(p -> {
-    WeightedFamilyEntry e = new WeightedFamilyEntry(p);
-    // Optional explicitness:
-    // e.enabledProperty().set(true);
-    // e.weightProperty().set(1.0);
-    entries.add(e);
-});
-familyPool = new FamilyPool(entries);
+        // Build weighted entries from all registered providers (defaults: enabled=true, weight=1.0)
+        List<WeightedFamilyEntry> entries = new ArrayList<>();
+        AsteroidMeshProvider.PROVIDERS.values().forEach(p -> {
+            WeightedFamilyEntry e = new WeightedFamilyEntry(p);
+            // Optional explicitness:
+            // e.enabledProperty().set(true);
+            // e.weightProperty().set(1.0);
+            entries.add(e);
+        });
+        familyPool = new FamilyPool(entries);
 
-// Placement: belt with its built-in defaults (no public setters)
-BeltPlacementStrategy belt = new BeltPlacementStrategy();
-//belt.setThicknessSigma(0);
-placement = belt;
+        // Placement: belt with its built-in defaults (no public setters)
+        BeltPlacementStrategy belt = new BeltPlacementStrategy();
+        //belt.setThicknessSigma(0);
+        placement = belt;
 
+        // --- LOD Manager ---
+        lodManager = new AsteroidLodManager(gameView.getCamera());
+        // Tune distances to your ~8k belt (adjust as you like)
+        lodManager.setDistances(1500, 3500, 6000, 400); // near, mid, far, hysteresis
+        lodManager.setBudgetPerFrame(120);
+        // Optional: gate swaps to a 70° half-cone in front of the camera
+        lodManager.setForwardConeDegrees(70);
+        // Start its internal timer now; it won’t do anything until you register a field
+        lodManager.start();
+        
         // TEMP craft proxy so you can see hide/show immediately.
         // Remove once your real craft rig is wired up.
         fancyCraft = new FancyCraft();
@@ -168,14 +180,16 @@ scene.setOnKeyPressed(e -> {
 
             // High-count config using our helper
             var cfg = WorldBuilder.defaultHighCountConfig();
-            cfg.count = 500; // higher count requires higher vram; 
-            cfg.subdivisionsMax = 1;
+            cfg.count = 1000; // higher count requires higher vram; 
+            cfg.subdivisionsMax = 3;
             cfg.usePrototypes = true; //prototypes on for performance improvements
             cfg.prototypeCount = 20; //higher prototype count improves variability at cost of performance
-//cfg.baseColor = Color.GRAY;
+            //cfg.baseColor = Color.GRAY;
 
             fieldHandle = worldBuilder.buildAndAttach(familyPool, placement, cfg);
             System.out.println("Spawned: " + fieldHandle.getField().instances.size() + " asteroids");
+            lodManager.clear(); // drop any prior references
+            lodManager.registerField(fieldHandle.getField());            
         }
         case F10 -> {
             if (fieldHandle != null) {
@@ -183,6 +197,8 @@ scene.setOnKeyPressed(e -> {
                 fieldHandle = null;
                 System.out.println("Cleared field.");
             }
+            // Also clear LOD entries so it stops touching removed meshes
+            lodManager.clear();
         }      
         default -> { /* noop */ }
     }
