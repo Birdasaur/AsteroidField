@@ -4,7 +4,9 @@ import AsteroidField.asteroids.field.AsteroidField;
 import AsteroidField.asteroids.field.AsteroidInstance;
 import AsteroidField.asteroids.parameters.AsteroidParameters;
 import AsteroidField.asteroids.providers.AsteroidMeshProvider;
+import AsteroidField.events.AsteroidFieldEvent;
 import javafx.animation.AnimationTimer;
+import javafx.event.EventHandler;
 import javafx.geometry.Point3D;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.paint.Color;
@@ -30,10 +32,10 @@ import java.util.concurrent.ThreadLocalRandom;
  *   AsteroidLodManager lod = new AsteroidLodManager(camera);
  *   lod.setDistances(5_000, 10_000, 20_000, 800);
  *   lod.setBudgetPerFrame(100);
- *   lod.registerField(field);
+ *   // register lod as an event handler on the Scene/root for AsteroidFieldEvent.ANY
  *   lod.start();
  */
-public final class AsteroidLodManager {
+public final class AsteroidLodManager implements EventHandler<AsteroidFieldEvent> {
 
     /** Small read-only view of what we need from AsteroidInstance. */
     public interface Source {
@@ -98,6 +100,9 @@ public final class AsteroidLodManager {
     // Randomized order to reduce visible patterns
     private final Random rng = ThreadLocalRandom.current();
 
+    // Event-driven coordination (no field IDs needed)
+    private AsteroidField lastAttachedField = null;
+
     public AsteroidLodManager(PerspectiveCamera camera) {
         this.camera = camera;
         recomputeBands();
@@ -123,6 +128,7 @@ public final class AsteroidLodManager {
 
     /** Register a whole field at once. */
     public void registerField(AsteroidField field) {
+        if (field == null) return;
         for (AsteroidInstance ai : field.instances) {
             register(toSource(ai));
         }
@@ -347,12 +353,13 @@ public final class AsteroidLodManager {
                 .subdivisions(targetSub)
                 .build();
     }
-public String debugSummary() {
-    return String.format(
-        "Entries=%d  Budget=%d  Near=%.0f  Mid=%.0f  Far=%.0f",
-        entries.size(), budgetPerFrame, nearIn, midIn, farIn);
-}
-    
+
+    public String debugSummary() {
+        return String.format(
+            "Entries=%d  Budget=%d  Near=%.0f  Mid=%.0f  Far=%.0f",
+            entries.size(), budgetPerFrame, nearIn, midIn, farIn);
+    }
+
     // Adapter from your existing AsteroidInstance
     private static Source toSource(AsteroidInstance ai) {
         return new Source() {
@@ -362,5 +369,34 @@ public String debugSummary() {
             @Override public double approxRadius() { return ai.approxRadius(); }
             @Override public Point3D position() { return ai.position(); }
         };
+    }
+
+    // ----------------------------
+    // Event handling
+    // ----------------------------
+
+    @Override
+    public void handle(AsteroidFieldEvent event) {
+        final var type = event.getEventType();
+
+        if (type == AsteroidFieldEvent.ATTACHED) {
+            AsteroidField f = event.getField();
+            // Remember and register the latest field
+            lastAttachedField = f;
+            clear();
+            registerField(f);
+        }
+        else if (type == AsteroidFieldEvent.DETACHED) {
+            // Clear everything and forget the field
+            clear();
+            lastAttachedField = null;
+        }
+        else if (type == AsteroidFieldEvent.RESET_REQUEST) {
+            // Rebuild LOD state from the last known field (if any)
+            clear();
+            if (lastAttachedField != null) {
+                registerField(lastAttachedField);
+            }
+        }
     }
 }

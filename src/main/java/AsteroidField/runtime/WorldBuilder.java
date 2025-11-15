@@ -6,6 +6,7 @@ import AsteroidField.asteroids.field.AsteroidFieldGenerator;
 import AsteroidField.asteroids.field.AsteroidInstance;
 import AsteroidField.asteroids.field.families.FamilyPool;
 import AsteroidField.asteroids.field.placement.PlacementStrategy;
+import AsteroidField.events.AsteroidFieldEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -49,6 +50,13 @@ public final class WorldBuilder {
                     }
                     registered.clear();
                 }
+                var scene = view.getScene();
+                if (scene != null && scene.getRoot() != null) {
+                    scene.getRoot().fireEvent(AsteroidFieldEvent.detached(this, scene.getRoot()));
+                } else {
+                    // Fallback: still bubbles if the view is in the graph
+                    view.fireEvent(AsteroidFieldEvent.detached(this, view));
+                }                
             };
             if (Platform.isFxApplicationThread()) r.run(); else Platform.runLater(r);
         }

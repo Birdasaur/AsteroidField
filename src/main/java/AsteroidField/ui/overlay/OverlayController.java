@@ -1,6 +1,8 @@
 package AsteroidField.ui.overlay;
 
 import AsteroidField.asteroids.AsteroidLodManager;
+import AsteroidField.asteroids.field.families.FamilyPool;
+import AsteroidField.asteroids.field.placement.PlacementStrategy;
 import AsteroidField.events.ApplicationEvent;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -17,15 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Central overlay hub:
  *  - Manages overlay panes in a single overlay root (lazy-create & cache).
  *  - Holds a tiny service registry so panes can look up runtime services.
- *  - Listens for app-level overlay events (console, LOD pane, etc).
- *
- * Usage:
- *   OverlayController oc = new OverlayController(scene, overlayDesktop);
- *   // Register services (anytime — global stash works before/after construction):
- *   OverlayController.registerGlobalService(AsteroidLodManager.class, lodManager);
- *   // Fire events elsewhere:
- *   scene.getRoot().fireEvent(new ApplicationEvent(ApplicationEvent.SHOW_ASTEROID_LOD));
- *   scene.getRoot().fireEvent(new ApplicationEvent(ApplicationEvent.SHOW_TEXT_CONSOLE, "Hello", false));
+ *  - Listens for app-level overlay events (console, LOD pane, field debug, etc).
  */
 public final class OverlayController {
 
@@ -174,7 +168,6 @@ public final class OverlayController {
         });
 
         // LOD pane: SHOW / CLOSE
-        // Requires ApplicationEvent.SHOW_ASTEROID_LOD and CLOSE_ASTEROID_LOD
         scene.addEventHandler(ApplicationEvent.SHOW_ASTEROID_LOD, e -> {
             AsteroidLodManager lod = getService(AsteroidLodManager.class);
             Node pane = showPane("lod", () -> new AsteroidLodPane(scene, overlayRoot, lod));
@@ -184,6 +177,29 @@ public final class OverlayController {
 
         scene.addEventHandler(ApplicationEvent.CLOSE_ASTEROID_LOD, e -> {
             closePane("lod");
+            e.consume();
+        });
+
+        // Field Debug pane: SHOW / CLOSE  (NEW)
+        scene.addEventHandler(ApplicationEvent.SHOW_FIELD_MANAGER, e -> {
+            PlacementStrategy placement = getService(PlacementStrategy.class);
+            FamilyPool families = getService(FamilyPool.class);
+
+            if (placement == null || families == null) {
+                System.out.println("[OverlayController] Missing services for FieldDebugPane: "
+                        + "placement=" + placement + ", families=" + families
+                        + " (did you register them via OverlayController.registerGlobalService?)");
+                e.consume();
+                return;
+            }
+
+            Node pane = showPane("field_debug", () -> new FieldDebugPane(scene, overlayRoot, placement, families));
+            bringToFront(pane);
+            e.consume();
+        });
+
+        scene.addEventHandler(ApplicationEvent.CLOSE_FIELD_MANAGER, e -> {
+            closePane("field_debug");
             e.consume();
         });
     }

@@ -5,19 +5,24 @@ import AsteroidField.asteroids.field.families.FamilyPool;
 import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
 import AsteroidField.asteroids.field.placement.BeltPlacementStrategy;
 import AsteroidField.asteroids.field.placement.PlacementStrategy;
+import AsteroidField.events.AsteroidFieldEvent;
+
 import java.util.List;
+
 import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -28,6 +33,7 @@ import javafx.scene.layout.VBox;
  * - Binds directly to BeltPlacementStrategy properties.
  * - Binds enable/weight for FamilyPool entries.
  * - Exposes generator knobs you can apply on next spawn via fillConfig(...).
+ * - Provides a LOD Reset action that clears & re-registers LOD via event.
  */
 public class FieldDebugPane extends LitPathPane {
 
@@ -40,7 +46,8 @@ public class FieldDebugPane extends LitPathPane {
     private final FamilyPool families;
 
     public FieldDebugPane(Scene scene, Pane desktop, PlacementStrategy placement, FamilyPool families) {
-        super(scene, desktop, 480, 640, buildContent(placement, families),
+        super(scene, desktop, 480, 680, // slightly taller to fit LOD section
+              buildContent(scene, placement, families),
               "Field Debug", "", 250.0, 350.0);
         this.placement = placement;
         this.families = families;
@@ -54,7 +61,7 @@ public class FieldDebugPane extends LitPathPane {
         cfg.prototypeCount = prototypeCount.get();
     }
 
-    private static VBox buildContent(PlacementStrategy placement, FamilyPool families) {
+    private static VBox buildContent(Scene ownerScene, PlacementStrategy placement, FamilyPool families) {
         VBox root = new VBox(12);
         root.setPadding(new Insets(10));
         root.setFillWidth(true);
@@ -62,8 +69,15 @@ public class FieldDebugPane extends LitPathPane {
         // --- Generator section ---
         VBox genBox = new VBox(6);
         genBox.getChildren().add(new Label("Generator"));
-        Spinner<Integer> countSpin = new Spinner<>(new SpinnerValueFactory.IntegerSpinnerValueFactory(10, 1000, 150, 10));
-        Spinner<Integer> protoSpin = new Spinner<>(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 400, 48, 1));
+
+        Spinner<Integer> countSpin = new Spinner<>(
+                new SpinnerValueFactory.IntegerSpinnerValueFactory(10, 3000, 150, 10)); // widened safe range
+        countSpin.setEditable(true);
+
+        Spinner<Integer> protoSpin = new Spinner<>(
+                new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 400, 48, 1));
+        protoSpin.setEditable(true);
+
         CheckBox useProto = new CheckBox("Use Prototypes (faster at high count)");
         useProto.setSelected(true);
 
@@ -85,8 +99,34 @@ public class FieldDebugPane extends LitPathPane {
         famBox.getChildren().add(new Label("Families"));
         famBox.getChildren().add(familyControls(families.entries()));
 
+        // --- LOD section (Reset button) ---
+        VBox lodBox = new VBox(6);
+        lodBox.getChildren().add(new Label("LOD"));
+        Button btnLodReset = new Button("LOD Reset");
+        btnLodReset.setTooltip(new Tooltip("Clear LOD state and re-register the current asteroid field"));
+        btnLodReset.setOnAction(ev -> {
+            // Prefer the known ownerScene passed to the constructor;
+            // otherwise fall back to whatever scene the button is in.
+            Scene sceneRef = (ownerScene != null) ? ownerScene : btnLodReset.getScene();
+            if (sceneRef != null && sceneRef.getRoot() != null) {
+                sceneRef.getRoot().fireEvent(AsteroidFieldEvent.resetRequest(btnLodReset, sceneRef.getRoot()));
+            } else {
+                // Fallback: still bubbles up from this button if it's attached somewhere
+                btnLodReset.fireEvent(AsteroidFieldEvent.resetRequest(btnLodReset, btnLodReset));
+            }
+        });
+        lodBox.getChildren().add(btnLodReset);
+
         // Glue
-        root.getChildren().addAll(genBox, new Separator(), placeBox, new Separator(), famBox);
+        root.getChildren().addAll(
+                genBox,
+                new Separator(),
+                placeBox,
+                new Separator(),
+                famBox,
+                new Separator(),
+                lodBox
+        );
 
         // Wire generator controls to properties on the pane instance (via lookup later)
         root.setUserData(new Object[]{countSpin, protoSpin, useProto});
