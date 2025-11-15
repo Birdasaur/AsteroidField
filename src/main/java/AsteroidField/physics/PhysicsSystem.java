@@ -8,6 +8,15 @@ import java.util.List;
 /** Always-on fixed-step physics loop. Orchestrates contributors only. */
 public final class PhysicsSystem {
 
+// --- PERF LOGGING (PhysicsSystem) ---
+//private static final boolean PERF = Boolean.getBoolean("perf.logs");
+private static final boolean PERF = true;
+private static final long PERF_WINDOW_NS = 1_000_000_000L; // 1s
+
+private long perfWindowStartNs = 0L;
+private long perfPhysNsAcc = 0L;
+private int  perfSubstepsAcc = 0;
+    
     private final double fixedDt;              // e.g., 1/120
     private final double maxAccumulator = 0.25;
     private final List<PhysicsContributor> contributors = new ArrayList<>();
@@ -17,21 +26,54 @@ public final class PhysicsSystem {
     private long lastNs = -1L;
 
     private final AnimationTimer timer = new AnimationTimer() {
-        @Override public void handle(long now) {
+        @Override
+        public void handle(long now) {
             if (!enabled) return;
             if (lastNs < 0) { lastNs = now; return; }
+
+            final long perfFrameStart = PERF ? System.nanoTime() : 0L;
 
             double dt = (now - lastNs) * 1e-9;
             lastNs = now;
 
             accumulator = Math.min(accumulator + dt, maxAccumulator);
+            int substeps = 0;
+
             while (accumulator >= fixedDt) {
                 for (PhysicsContributor c : contributors) {
                     c.step(fixedDt);
                 }
                 accumulator -= fixedDt;
+                substeps++;
+            }
+
+            if (PERF) {
+                long frameNs = System.nanoTime() - perfFrameStart;
+                perfPhysNsAcc += frameNs;
+                perfSubstepsAcc += substeps;
+
+                if (perfWindowStartNs == 0L)
+                    perfWindowStartNs = System.nanoTime();
+
+                long elapsed = System.nanoTime() - perfWindowStartNs;
+                if (elapsed >= PERF_WINDOW_NS) {
+                    double ms = perfPhysNsAcc / 1_000_000.0;
+                    System.out.printf(
+                        "[PERF] t=%d, Physics, phys_total_ms=%.3f, substeps=%d, fixed_dt_ms=%.3f%n",
+                        System.currentTimeMillis(),
+                        ms,
+                        perfSubstepsAcc,
+                        fixedDt * 1000.0
+                    );
+
+                    // reset
+                    perfWindowStartNs = System.nanoTime();
+                    perfPhysNsAcc = 0L;
+                    perfSubstepsAcc = 0;
+                }
             }
         }
+
     };
 
     public PhysicsSystem(double fixedHz) {

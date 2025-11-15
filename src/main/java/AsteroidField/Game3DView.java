@@ -94,13 +94,6 @@ public class Game3DView extends Pane {
                 f.top(), f.bottom(), f.left(), f.right(), f.front(), f.back(), skySize, camera
             );
             worldRoot.getChildren().add(0, sky);
-            
-//// inside your 3D setup code:
-//Image spaceEQ = ResourceUtils.load3DTextureImage("tycho-skymap"); // 2:1 texture
-//double radius = camera.getFarClip() * 0.45; // keep comfortably within far plane
-//SphericalSkybox skysphere = new SphericalSkybox(spaceEQ, radius, camera);
-//worldRoot.getChildren().add(0, skysphere);            
-
         } catch (IOException ex) {
             System.getLogger(Game3DView.class.getName())
                   .log(System.Logger.Level.ERROR, (String) null, ex);
@@ -132,8 +125,7 @@ public class Game3DView extends Pane {
 //        // ... after you create `craft = CameraKinematicAdapter.attach(...)`:
 //        PointLight head = new PointLight(Color.color(1, 1, 1, 0.85));
 //        getCraft().getRigNode().getChildren().add(head);        
-        
-        
+                
         // --- Collidables supplier initialization ---
         collidablesRegistry = new CollidableRegistry();
         collidableSupplier = () -> collidablesRegistry.getCollidables();    
@@ -172,7 +164,8 @@ public class Game3DView extends Pane {
         shipCollisions.setMaxIterations(2);
         shipCollisions.setRestitution(0.05);
         shipCollisions.setFriction(0.15);
-
+        shipCollisions.markMeshesDirty(); // ensure the cache populates the first time it runs
+        
         // --- Register contributors with physics ---
         //Order matters! spacecraft should have all forces accumulated before it integrates
         physics.addContributor(thrusters);
@@ -205,12 +198,14 @@ public class Game3DView extends Pane {
         if (n != null) {
             worldRoot.getChildren().add(n);
             collidablesRegistry.add(n);
+            shipCollisions.markMeshesDirty(); 
         }
     }
     public void removeCollidable(Node n) {
         if (n != null) {
             worldRoot.getChildren().remove(n);
             collidablesRegistry.remove(n);
+            shipCollisions.markMeshesDirty(); 
         }
     }
 

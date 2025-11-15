@@ -200,7 +200,6 @@ public class GameApp extends Application {
 
                     fieldHandle = worldBuilder.buildAndAttach(familyPool, placement, cfg);
                     System.out.println("Spawned: " + fieldHandle.getField().instances.size() + " asteroids");
-                    // No direct LOD/event calls—WorldBuilder now fires ATTACHED.
                 }
                 case F10 -> {
                     if (fieldHandle != null) {
