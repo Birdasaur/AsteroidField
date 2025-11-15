@@ -12,11 +12,13 @@ import java.util.List;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -29,10 +31,20 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.CullFace;
+import javafx.scene.shape.DrawMode;
 
+/**
+ * Floating debug pane for field generation, placement tuning, and render overrides.
+ * - Binds directly to BeltPlacementStrategy properties.
+ * - Controls enable/weight for FamilyPool entries.
+ * - "Regenerate Field" / "Clear Field" buttons fire AsteroidFieldEvent requests.
+ * - Render toolbar publishes RENDER_MODE_REQUEST and CULLFACE_REQUEST.
+ * - Content is wrapped in a ScrollPane; sliders grow to full width.
+ */
 public class FieldDebugPane extends LitPathPane {
 
-    // Generator knobs
+    // Generator knobs (applied on next spawn via fillConfig)
     private final IntegerProperty count = new SimpleIntegerProperty(150);
     private final IntegerProperty prototypeCount = new SimpleIntegerProperty(48);
     private final SimpleBooleanProperty usePrototypes = new SimpleBooleanProperty(true);
@@ -44,7 +56,7 @@ public class FieldDebugPane extends LitPathPane {
         super(
             scene,
             desktop,
-            520, 680,
+            540, 700,                          // comfortable viewport for scrolled content
             buildContainer(scene, placement, families),
             "Field Debug",
             "",
@@ -55,15 +67,16 @@ public class FieldDebugPane extends LitPathPane {
         setOpaqueEnabled(true);
     }
 
-    /** Allows caller code to push this UI state into a config if needed. */
+    /** Apply current UI generator knobs to a config before spawning. */
     public void fillConfig(AsteroidFieldGenerator.Config cfg) {
         cfg.count = getDesiredCount();
-        cfg.usePrototypes = isUsePrototypes();
         cfg.prototypeCount = getDesiredPrototypeCount();
+        cfg.usePrototypes = isUsePrototypes();
     }
 
-    // ---------- UI builders ----------
+    // ---------- Builders ----------
 
+    /** Root container must be a Pane → we use a VBox that hosts a ScrollPane. */
     private static VBox buildContainer(Scene ownerScene, PlacementStrategy placement, FamilyPool families) {
         VBox container = new VBox();
         container.setFillWidth(true);
@@ -75,7 +88,7 @@ public class FieldDebugPane extends LitPathPane {
         sp.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         sp.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         sp.setPannable(true);
-        sp.setPrefViewportHeight(640);
+        sp.setPrefViewportHeight(660);
 
         container.getChildren().add(sp);
         VBox.setVgrow(sp, Priority.ALWAYS);
@@ -87,17 +100,28 @@ public class FieldDebugPane extends LitPathPane {
         root.setPadding(new Insets(10));
         root.setFillWidth(true);
 
-        // === Toolbar (top): REGENERATE / CLEAR ===
-        HBox toolbar = new HBox(8);
+        // === Toolbar (top): Regenerate / Clear / Render Controls ===
+        HBox toolbar = new HBox(10);
         toolbar.setAlignment(Pos.CENTER_LEFT);
+        HBox drawToolbar = new HBox(10);
+        drawToolbar.setAlignment(Pos.CENTER_LEFT);
 
         Button btnRegenerate = new Button("Regenerate Field");
         Button btnClear = new Button("Clear Field");
 
+        // Render controls
+        Label lblDraw = new Label("Draw:");
+        ComboBox<DrawMode> cbDraw = new ComboBox<>(FXCollections.observableArrayList(DrawMode.FILL, DrawMode.LINE));
+        cbDraw.setValue(DrawMode.FILL);
+
+        Label lblCull = new Label("Cull:");
+        ComboBox<CullFace> cbCull = new ComboBox<>(FXCollections.observableArrayList(CullFace.BACK, CullFace.FRONT, CullFace.NONE));
+        cbCull.setValue(CullFace.BACK);
+
+        // Actions: Regenerate
         btnRegenerate.setOnAction(ev -> {
-            // Build a config from the current UI state
             AsteroidFieldGenerator.Config cfg = new AsteroidFieldGenerator.Config();
-            // read values from the bound controls (via userData access)
+
             Object[] ud = (Object[]) root.getUserData();
             @SuppressWarnings("unchecked") Spinner<Integer> countSpin = (Spinner<Integer>) ud[0];
             @SuppressWarnings("unchecked") Spinner<Integer> protoSpin = (Spinner<Integer>) ud[1];
@@ -107,7 +131,6 @@ public class FieldDebugPane extends LitPathPane {
             cfg.prototypeCount = protoSpin.getValue();
             cfg.usePrototypes = useProto.isSelected();
 
-            // Fire REGENERATE_REQUEST with config
             Scene sceneRef = ownerScene != null ? ownerScene : btnRegenerate.getScene();
             if (sceneRef != null && sceneRef.getRoot() != null) {
                 sceneRef.getRoot().fireEvent(AsteroidFieldEvent.regenerateRequest(btnRegenerate, sceneRef.getRoot(), cfg));
@@ -116,6 +139,7 @@ public class FieldDebugPane extends LitPathPane {
             }
         });
 
+        // Actions: Clear
         btnClear.setOnAction(ev -> {
             Scene sceneRef = ownerScene != null ? ownerScene : btnClear.getScene();
             if (sceneRef != null && sceneRef.getRoot() != null) {
@@ -125,19 +149,51 @@ public class FieldDebugPane extends LitPathPane {
             }
         });
 
-        toolbar.getChildren().addAll(btnRegenerate, btnClear);
+        // Actions: DrawMode change
+        cbDraw.valueProperty().addListener((obs, oldV, newV) -> {
+            if (newV == null) return;
+            Scene sceneRef = ownerScene != null ? ownerScene : cbDraw.getScene();
+            if (sceneRef != null && sceneRef.getRoot() != null) {
+                sceneRef.getRoot().fireEvent(AsteroidFieldEvent.renderModeRequest(cbDraw, sceneRef.getRoot(), newV));
+            } else {
+                cbDraw.fireEvent(AsteroidFieldEvent.renderModeRequest(cbDraw, cbDraw, newV));
+            }
+        });
 
+        // Actions: CullFace change
+        cbCull.valueProperty().addListener((obs, oldV, newV) -> {
+            if (newV == null) return;
+            Scene sceneRef = ownerScene != null ? ownerScene : cbCull.getScene();
+            if (sceneRef != null && sceneRef.getRoot() != null) {
+                sceneRef.getRoot().fireEvent(AsteroidFieldEvent.cullFaceRequest(cbCull, sceneRef.getRoot(), newV));
+            } else {
+                cbCull.fireEvent(AsteroidFieldEvent.cullFaceRequest(cbCull, cbCull, newV));
+            }
+        });
+
+        // Assemble toolbar
+        toolbar.getChildren().addAll(
+            btnRegenerate,
+            btnClear
+        );
+
+        // Assemble toolbar
+        drawToolbar.getChildren().addAll(
+            lblDraw, cbDraw,
+            lblCull, cbCull
+        );
+        
         // --- Generator section ---
         VBox genBox = new VBox(6);
         genBox.getChildren().add(new Label("Generator"));
 
         Spinner<Integer> countSpin = new Spinner<>(
-                new SpinnerValueFactory.IntegerSpinnerValueFactory(10, 3000, 150, 10));
+            new SpinnerValueFactory.IntegerSpinnerValueFactory(10, 3000, 150, 10));
         countSpin.setEditable(true);
         countSpin.setMaxWidth(Double.MAX_VALUE);
 
         Spinner<Integer> protoSpin = new Spinner<>(
-                new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 400, 48, 1));
+            new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 400, 48, 1));
         protoSpin.setEditable(true);
         protoSpin.setMaxWidth(Double.MAX_VALUE);
 
@@ -164,13 +220,15 @@ public class FieldDebugPane extends LitPathPane {
 
         // Glue
         root.getChildren().addAll(
-                toolbar,
-                new Separator(),
-                genBox,
-                new Separator(),
-                placeBox,
-                new Separator(),
-                famBox
+            toolbar,
+            new Separator(),
+            drawToolbar,    
+            new Separator(),
+            genBox,
+            new Separator(),
+            placeBox,
+            new Separator(),
+            famBox
         );
 
         // Store control refs for quick access by actions
@@ -285,7 +343,8 @@ public class FieldDebugPane extends LitPathPane {
         return box;
     }
 
-    // Accessors (content is inside ScrollPane inside this pane's VBox content)
+    // ---------- Accessors (content is inside ScrollPane inside this pane's VBox) ----------
+
     private ScrollPane getScrollPane() {
         return (ScrollPane) ((VBox) contentPane).getChildren().get(0);
     }

@@ -7,11 +7,12 @@ import AsteroidField.physics.PhysicsContributor;
 import AsteroidField.spacecraft.CameraKinematicAdapter;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
 import javafx.geometry.Point3D;
 import javafx.scene.Node;
@@ -26,12 +27,14 @@ import javafx.scene.shape.MeshView;
  *  - Frequency cap (~30Hz) with fast-motion override
  *  - Cached collidable MeshViews + cached SCENE-space bounding spheres (refresh on field attach/detach via markMeshesDirty())
  *  - Per-sweep broadphase using segment-to-sphere distance to prune candidates before firstHit()
+ *  - Candidate ordering by closest-approach time + early-exit in narrow phase
+ *  - HashMap-based per-instance registry + pluggable collider factory (for Collision LOD/BVH)
  *  - Detailed perf logging (retained), incl. skip counters and candidate counts
  */
 public final class SpacecraftCollisionContributor implements PhysicsContributor {
 
     // --- PERF LOGGING (enable with -Dperf.logs=true) ---
-    private static final boolean PERF = true; //Boolean.getBoolean("perf.logs");
+    private static final boolean PERF = true; // Boolean.getBoolean("perf.logs");
     private static final long PERF_WINDOW_NS = 1_000_000_000L; // 1 s
     private long perfWinStartNs = 0L;
 
@@ -51,6 +54,8 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
     private int  perfSkippedThrottleAcc = 0;// times skipped due to 30Hz throttle
     private int  perfCandidatesAcc = 0;     // total candidate count across sweeps
     private int  perfSweepsAcc = 0;         // number of sweep executions in window
+    private int  perfCandTestedAcc = 0;     // candidates actually sent to narrow phase
+    private int  perfEarlyBreaksAcc = 0;    // sweeps that exited early due to ordering thresholds
 
     // --- Core state ---
     private final Node worldRoot;
@@ -81,29 +86,45 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
     // --- Throttle/caching runtime ---
     private int stepCounter = 0;
 
-    /** Cached collidable mesh views (static while field attached). */
+    /** Cached collidable mesh views (static while field attached), for iteration order. */
     private final List<MeshView> cachedMeshes = new ArrayList<>();
 
     /** Cached SCENE-space bounding spheres parallel to cachedMeshes (same indices). */
     private final List<SphereBound> cachedBounds = new ArrayList<>();
 
+    /** HashMap registry from render MeshView -> per-instance binding to shared collider bundle. */
+    private final Map<MeshView, InstanceEntry> instanceMap = new HashMap<>();
+
+    /** Pluggable factory that owns the prototype (ColliderKey -> ColliderBundle) HashMap. */
+    private final ColliderFactory colliderFactory;
+
     /** Flag to rebuild caches on next sweep. */
     private volatile boolean meshesDirty = true;
 
+    // --- ctors ---
     public SpacecraftCollisionContributor(Node worldRoot,
                                           CameraKinematicAdapter craft,
                                           Supplier<List<Node>> collidables,
                                           double craftRadius) {
+        this(worldRoot, craft, collidables, craftRadius, new DefaultColliderFactory());
+    }
+
+    public SpacecraftCollisionContributor(Node worldRoot,
+                                          CameraKinematicAdapter craft,
+                                          Supplier<List<Node>> collidables,
+                                          double craftRadius,
+                                          ColliderFactory colliderFactory) {
         this.worldRoot = worldRoot;
         this.craft = craft;
         this.collidables = collidables;
         this.radius = craftRadius;
+        this.colliderFactory = colliderFactory;
 
         markMeshesDirty(); // ensure initial cache refresh
 
         // Listen for world lifecycle changes and invalidate cache automatically
         GameEventBus.addHandler(AsteroidFieldEvent.ATTACHED,  e -> markMeshesDirty());
-        GameEventBus.addHandler(AsteroidFieldEvent.DETACHED, e -> markMeshesDirty());
+        GameEventBus.addHandler(AsteroidFieldEvent.DETACHED,  e -> markMeshesDirty());
     }
 
     // --- Public controls / hooks ---
@@ -175,8 +196,6 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         Node colliderNode = null;
 
         if (runSweep) {
-            // Prep SCENE-space endpoints once (firstHit expects SCENE)
-            // We convert WORLD-ROOT (local) to SCENE here
             for (int iter = 0; iter < maxIterations && remaining > 1e-6; iter++) {
                 final long tX0 = PERF ? System.nanoTime() : 0L;
                 Point3D p1 = p0.add(v.multiply(remaining));
@@ -184,35 +203,68 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
                 Point3D p1Scene = worldRoot.localToScene(p1);
                 if (PERF) perfTransformsNsAcc += System.nanoTime() - tX0;
 
-                // --- Broadphase: prune by cached sphere bounds (SCENE space) ---
+                // --- Broadphase: prune & ORDER candidates (SCENE space) ---
                 final long tBp0 = PERF ? System.nanoTime() : 0L;
                 int n = cachedMeshes.size();
-                // Collect candidates by scanning bounds and performing segment-to-sphere distance test
-                // Allocate on stack; keep indices for direct MeshView access
-                List<Integer> candidates = new ArrayList<>(Math.min(64, n));
+                List<Candidate> candidates = new ArrayList<>(Math.min(64, n));
                 double inflate = radius + broadphaseMargin;
+
+                // segment stats for parametric padding (convert spatial pad -> tPad)
+                double segDx = p1Scene.getX() - p0Scene.getX();
+                double segDy = p1Scene.getY() - p0Scene.getY();
+                double segDz = p1Scene.getZ() - p0Scene.getZ();
+                double segLen = Math.sqrt(segDx*segDx + segDy*segDy + segDz*segDz);
+                double tPad = segLen > 1e-9 ? (inflate / segLen) : 0.0;
+
                 for (int i = 0; i < n; i++) {
                     SphereBound sb = cachedBounds.get(i);
                     double r = sb.radius + inflate;
-                    if (segmentPointDistanceSq(p0Scene, p1Scene, sb.center) <= r * r) {
-                        candidates.add(i);
+
+                    double tC = segmentPointClosestT(p0Scene, p1Scene, sb.center);
+                    double px = p0Scene.getX() + segDx * tC;
+                    double py = p0Scene.getY() + segDy * tC;
+                    double pz = p0Scene.getZ() + segDz * tC;
+                    double dx = sb.center.getX() - px;
+                    double dy = sb.center.getY() - py;
+                    double dz = sb.center.getZ() - pz;
+                    double d2 = dx*dx + dy*dy + dz*dz;
+
+                    if (d2 <= r * r) {
+                        candidates.add(new Candidate(i, tC, d2));
                     }
                 }
+
+                // order by earliest encounter
+                candidates.sort((a, b) -> Double.compare(a.tBound, b.tBound));
+
                 if (PERF) {
                     perfBroadphaseNsAcc += System.nanoTime() - tBp0;
                     perfCandidatesAcc += candidates.size();
                     perfSweepsAcc++;
                 }
 
-                // --- Narrow phase: precise sweep only on candidates ---
+                // --- Narrow phase: ordered by tBound; early exit once we can't beat bestT ---
                 double bestT = Double.POSITIVE_INFINITY;
                 SweepHit best = null;
 
                 final long tSweep0 = PERF ? System.nanoTime() : 0L;
-                for (int idx : candidates) {
-                    MeshView mv = cachedMeshes.get(idx);
-                    Optional<SweepSphereMesh.Hit> h = SweepSphereMesh.firstHit(
+                int tested = 0;
+
+                for (int k = 0; k < candidates.size(); k++) {
+                    Candidate cand = candidates.get(k);
+
+                    // If we already have a better hit in parametric time, later candidates can't beat it.
+                    if (bestT < Double.POSITIVE_INFINITY && cand.tBound > bestT + tPad) {
+                        if (PERF) perfEarlyBreaksAcc++;
+                        break;
+                    }
+
+                    MeshView mv = cachedMeshes.get(cand.idx);
+                    Optional<SweepSphereMesh.Hit> h = firstHitAgainstCollider(
                             mv, p0Scene, p1Scene, radius, frontFaceOnly);
+
+                    tested++;
+
                     if (h.isPresent() && h.get().t < bestT) {
                         bestT = h.get().t;
 
@@ -224,11 +276,16 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
 
                         best = new SweepHit(hitWorld, normalize(nWorld));
                         colliderNode = mv;
+
+                        // Aggressive early-exit: break on first valid hit (usually nearest in ordered list)
+                        break;
                     }
                 }
+
                 if (PERF) {
                     perfSweepNsAcc += System.nanoTime() - tSweep0;
                     perfItersAcc++;
+                    perfCandTestedAcc += tested;
                 }
 
                 if (best == null) {
@@ -307,7 +364,31 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         SphereBound(Point3D c, double r) { this.center = c; this.radius = r; }
     }
 
-    /** Rebuild cachedMeshes + cachedBounds (SCENE-space spheres), only when dirty. */
+    /** Candidate info (ordered by tBound). */
+    private static final class Candidate {
+        final int idx;
+        final double tBound;   // parametric closest-approach time on the sweep segment
+        final double dist2;    // squared distance at closest approach
+        Candidate(int idx, double tBound, double dist2) {
+            this.idx = idx; this.tBound = tBound; this.dist2 = dist2;
+        }
+    }
+
+    /** Use HashMap registry + collider factory to test against the collider LOD (or render mesh for Phase 1). */
+    private Optional<SweepSphereMesh.Hit> firstHitAgainstCollider(MeshView sourceMv,
+                                                                  Point3D p0Scene,
+                                                                  Point3D p1Scene,
+                                                                  double radius,
+                                                                  boolean frontFaceOnly) {
+        InstanceEntry entry = instanceMap.get(sourceMv);
+        if (entry == null) return Optional.empty();
+
+        MeshView colliderMv = entry.bundle().lod().meshView();
+        // Operating in SCENE space; colliderMv shares local geometry, so no extra transform here.
+        return SweepSphereMesh.firstHit(colliderMv, p0Scene, p1Scene, radius, frontFaceOnly);
+    }
+
+    /** Rebuild cachedMeshes + cachedBounds and the instance registry (HashMap), only when dirty. */
     private void ensureMeshesAndBoundsCached() {
         if (!meshesDirty) return;
 
@@ -321,9 +402,17 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         if (PERF) perfFlattenNsAcc += System.nanoTime() - tFlat0;
 
         final long tBnd0 = PERF ? System.nanoTime() : 0L;
+        instanceMap.clear();
         cachedBounds.clear();
-//        cachedBounds.ensureCapacity(cachedMeshes.size());
+
         for (MeshView mv : cachedMeshes) {
+            // 1) Prototype key
+            ColliderKey key = colliderFactory.keyFor(mv);
+            // 2) Shared prototype bundle (LOD + optional BVH later)
+            ColliderBundle bundle = colliderFactory.getOrBuild(key, mv);
+            // 3) Instance entry (HashMap for O(1) lookup in narrow phase)
+            instanceMap.put(mv, new InstanceEntry(mv, key, bundle));
+            // 4) Scene-space sphere bound for broadphase
             cachedBounds.add(computeSceneSphereBound(mv));
         }
         if (PERF) perfBoundsBuildNsAcc += System.nanoTime() - tBnd0;
@@ -334,7 +423,6 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
 
     /** Build a conservative SCENE-space bounding sphere from a node's local bounds. */
     private static SphereBound computeSceneSphereBound(MeshView mv) {
-        // Use local bounds' center, then transform to SCENE.
         Bounds bl = mv.getBoundsInLocal();
         Point3D centerLocal = new Point3D(
                 (bl.getMinX() + bl.getMaxX()) * 0.5,
@@ -343,7 +431,6 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         );
         Point3D centerScene = mv.localToScene(centerLocal);
 
-        // Approx radius: transform all 8 corners to scene and take max distance to center
         double maxR2 = 0.0;
         double[] xs = { bl.getMinX(), bl.getMaxX() };
         double[] ys = { bl.getMinY(), bl.getMaxY() };
@@ -357,7 +444,6 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
             if (r2 > maxR2) maxR2 = r2;
         }
         double radiusScene = Math.sqrt(maxR2);
-        // Fallback for degenerate bounds
         if (!(radiusScene > 0)) radiusScene = 0.5 * Math.max(
                 Math.max(bl.getWidth(), bl.getHeight()), bl.getDepth());
 
@@ -397,8 +483,7 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
 
         double vv = vx*vx + vy*vy + vz*vz;
         if (vv <= 1e-12) {
-            // Degenerate segment; use distance to p0
-            return wx*wx + wy*wy + wz*wz;
+            return (wx*wx + wy*wy + wz*wz);
         }
         double t = (wx*vx + wy*vy + wz*vz) / vv;
         if (t < 0) t = 0;
@@ -414,6 +499,20 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         return dx*dx + dy*dy + dz*dz;
     }
 
+    /** Parametric closest t in [0,1] from segment p0->p1 to point c (same space). */
+    private static double segmentPointClosestT(Point3D p0, Point3D p1, Point3D c) {
+        double vx = p1.getX() - p0.getX();
+        double vy = p1.getY() - p0.getY();
+        double vz = p1.getZ() - p0.getZ();
+        double wx = c.getX() - p0.getX();
+        double wy = c.getY() - p0.getY();
+        double wz = c.getZ() - p0.getZ();
+        double vv = vx*vx + vy*vy + vz*vz;
+        if (vv <= 1e-12) return 0.0;
+        double t = (wx*vx + wy*vy + wz*vz) / vv;
+        return t < 0 ? 0 : (t > 1 ? 1 : t);
+    }
+
     // --- PERF emission ---
 
     private void emitPerfIfDue() {
@@ -422,9 +521,10 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
         if (perfWinStartNs == 0L) perfWinStartNs = System.nanoTime();
         long elapsed = System.nanoTime() - perfWinStartNs;
         if (elapsed >= PERF_WINDOW_NS) {
-            double avgCandidates = (perfSweepsAcc > 0) ? (double) perfCandidatesAcc / perfSweepsAcc : 0.0;
+            double avgCandidates   = (perfSweepsAcc > 0) ? (double) perfCandidatesAcc   / perfSweepsAcc : 0.0;
+            double avgCandTested   = (perfSweepsAcc > 0) ? (double) perfCandTestedAcc   / perfSweepsAcc : 0.0;
             System.out.printf(
-                "[PERF] t=%d, Collision, get_ms=%.3f, flatten_ms=%.3f, bounds_ms=%.3f, broad_ms=%.3f, sweep_ms=%.3f, xform_ms=%.3f, meshes=%d, iters=%d, hits=%d, sweeps=%d, cand_avg=%.1f, speed=%.3f, speed_max=%.3f, skipped_idle=%d, skipped_throttle=%d%n",
+                "[PERF] t=%d, Collision, get_ms=%.3f, flatten_ms=%.3f, bounds_ms=%.3f, broad_ms=%.3f, sweep_ms=%.3f, xform_ms=%.3f, meshes=%d, iters=%d, hits=%d, sweeps=%d, cand_avg=%.1f, cand_tested_avg=%.1f, early_breaks=%d, speed=%.3f, speed_max=%.3f, skipped_idle=%d, skipped_throttle=%d%n",
                 System.currentTimeMillis(),
                 perfGetListNsAcc / 1_000_000.0,
                 perfFlattenNsAcc / 1_000_000.0,
@@ -437,6 +537,8 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
                 perfHitsAcc,
                 perfSweepsAcc,
                 avgCandidates,
+                avgCandTested,
+                perfEarlyBreaksAcc,
                 perfSpeedLast,
                 perfSpeedMax,
                 perfSkippedIdleAcc,
@@ -459,6 +561,8 @@ public final class SpacecraftCollisionContributor implements PhysicsContributor 
             perfSkippedThrottleAcc = 0;
             perfCandidatesAcc = 0;
             perfSweepsAcc = 0;
+            perfCandTestedAcc = 0;
+            perfEarlyBreaksAcc = 0;
         }
     }
 }
