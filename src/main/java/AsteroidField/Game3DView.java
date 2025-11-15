@@ -72,7 +72,7 @@ public class Game3DView extends Pane {
         camera.setTranslateZ(-800);
         camera.setTranslateY(-400);
 
-        subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.DISABLED);
+        subScene = new SubScene(worldRoot, 800, 600, true, SceneAntialiasing.BALANCED);
         worldRoot.setMouseTransparent(true);
         
         subScene.setFill(Color.DARKSLATEGREY);

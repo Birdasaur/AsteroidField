@@ -1,6 +1,7 @@
 package AsteroidField;
 
 import AsteroidField.asteroids.AsteroidLodManager;
+import AsteroidField.asteroids.field.AsteroidField;
 import AsteroidField.asteroids.field.AsteroidFieldGenerator;
 import AsteroidField.asteroids.field.families.FamilyPool;
 import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
@@ -32,6 +33,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.CullFace;
+import javafx.scene.shape.DrawMode;
+import javafx.scene.shape.MeshView;
 import javafx.stage.Stage;
 
 /**
@@ -52,7 +56,8 @@ public class GameApp extends Application {
     FamilyPool familyPool;
     PlacementStrategy placement;
     AsteroidLodManager lodManager;
-
+private DrawMode currentDrawMode = DrawMode.FILL;
+private CullFace currentCullFace = CullFace.BACK;
     private Scene scene;
     private BorderPane root;
 
@@ -116,6 +121,40 @@ public class GameApp extends Application {
             } 
             e.consume();
         });
+// Persist and apply DrawMode changes
+scene.addEventHandler(AsteroidFieldEvent.RENDER_MODE_REQUEST, e -> {
+    DrawMode mode = e.getDrawMode();
+    if (mode != null) {
+        currentDrawMode = mode;
+        if (fieldHandle != null && fieldHandle.getField() != null) {
+            fieldHandle.getField().instances.forEach(ai -> ai.node().setDrawMode(mode));
+        }
+        System.out.println("[GameApp] DrawMode -> " + mode);
+    }
+    e.consume();
+});
+
+// Persist and apply CullFace changes
+scene.addEventHandler(AsteroidFieldEvent.CULLFACE_REQUEST, e -> {
+    CullFace face = e.getCullFace();
+    if (face != null) {
+        currentCullFace = face;
+        if (fieldHandle != null && fieldHandle.getField() != null) {
+            fieldHandle.getField().instances.forEach(ai -> ai.node().setCullFace(face));
+        }
+        System.out.println("[GameApp] CullFace -> " + face);
+    }
+    e.consume();
+});
+
+// Ensure newly spawned fields pick up the current settings automatically
+scene.addEventHandler(AsteroidFieldEvent.ATTACHED, e -> {
+    AsteroidField f = e.getField();
+    if (f != null) {
+        applyRenderSettingsToField(f);
+    }
+    // no consume() so LOD manager also sees ATTACHED via its ANY handler
+});
 
         // TEMP craft proxy to visualize quickly
         fancyCraft = new FancyCraft();
@@ -223,7 +262,13 @@ public class GameApp extends Application {
         stage.setScene(scene);
         stage.show();
     }
-
+private void applyRenderSettingsToField(AsteroidField field) {
+    field.instances.forEach(ai -> {
+        MeshView mv = ai.node();
+        mv.setDrawMode(currentDrawMode);
+        mv.setCullFace(currentCullFace);
+    });
+}
     @Override
     public void stop() throws Exception {
         // Optional cleanup
