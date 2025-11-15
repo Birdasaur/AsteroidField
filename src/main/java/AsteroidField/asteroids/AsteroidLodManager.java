@@ -391,12 +391,5 @@ public final class AsteroidLodManager implements EventHandler<AsteroidFieldEvent
             clear();
             lastAttachedField = null;
         }
-        else if (type == AsteroidFieldEvent.RESET_REQUEST) {
-            // Rebuild LOD state from the last known field (if any)
-            clear();
-            if (lastAttachedField != null) {
-                registerField(lastAttachedField);
-            }
-        }
     }
 }

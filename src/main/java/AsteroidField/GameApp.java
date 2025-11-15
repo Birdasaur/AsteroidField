@@ -1,6 +1,7 @@
 package AsteroidField;
 
 import AsteroidField.asteroids.AsteroidLodManager;
+import AsteroidField.asteroids.field.AsteroidFieldGenerator;
 import AsteroidField.asteroids.field.families.FamilyPool;
 import AsteroidField.asteroids.field.families.WeightedFamilyEntry;
 import AsteroidField.asteroids.field.placement.BeltPlacementStrategy;
@@ -92,6 +93,29 @@ public class GameApp extends Application {
 
         // REQUIRED: register LOD manager for asteroid-field lifecycle events
         scene.addEventHandler(AsteroidFieldEvent.ANY, lodManager);
+        scene.addEventHandler(AsteroidFieldEvent.REGENERATE_REQUEST, e -> {
+            // Clean out prior field if present
+            if (fieldHandle != null) {
+                fieldHandle.detach();
+                fieldHandle = null;
+            }
+            // Take config from event (fallback to your default if null)
+            AsteroidFieldGenerator.Config cfg = e.getConfig();
+            if (cfg == null) {
+                cfg = WorldBuilder.defaultHighCountConfig();
+            }
+            // Build & attach
+            fieldHandle = worldBuilder.buildAndAttach(familyPool, placement, cfg);
+            System.out.println("Spawned: " + fieldHandle.getField().instances.size() + " asteroids");
+            e.consume();
+        });
+        scene.addEventHandler(AsteroidFieldEvent.CLEAR_REQUEST, e -> {
+            if (fieldHandle != null) {
+                fieldHandle.detach();
+                fieldHandle = null;
+            } 
+            e.consume();
+        });
 
         // TEMP craft proxy to visualize quickly
         fancyCraft = new FancyCraft();
